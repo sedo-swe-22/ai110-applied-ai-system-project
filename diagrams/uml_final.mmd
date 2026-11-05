@@ -1,0 +1,54 @@
+classDiagram
+    class Task {
+        +String description
+        +String time
+        +String frequency
+        +date due_date
+        +bool completed
+        +String priority
+        +#95;#95;post_init#95;#95;() void
+        +mark_complete() void
+        +to_dict() dict
+        +from_dict(data) Task
+    }
+
+    class Pet {
+        +String name
+        +String breed
+        +List~Task~ tasks
+        +add_task(task) void
+        +remove_task(task) void
+        +to_dict() dict
+        +from_dict(data) Pet
+    }
+
+    class Owner {
+        +String name
+        +List~Pet~ pets
+        +add_pet(pet) void
+        +get_all_tasks() List~Task~
+        +to_dict() dict
+        +from_dict(data) Owner
+        +save_to_json(path) void
+        +load_from_json(path) Owner
+    }
+
+    class Scheduler {
+        +Owner owner
+        +get_todays_schedule() List~Task~
+        +sort_by_time(tasks) List~Task~
+        +filter_tasks(pet_name, completed) List~Task~
+        +next_available_slot(on, after, step_minutes) String
+        +detect_conflicts(suggest) List~String~
+        +mark_task_complete(pet, task) Task
+    }
+
+    Owner "1" *-- "0..*" Pet : owns
+    Pet "1" *-- "0..*" Task : owns
+    Scheduler "1" --> "1" Owner : reads tasks via get_all_tasks()
+    Scheduler ..> Task : sorts, filters, flags conflicts
+    Scheduler ..> Pet : mark_task_complete() adds the next occurrence
+
+    note for Scheduler "Only class that makes scheduling decisions.<br/>Tasks do not store their pet; the Scheduler finds it by walking owner.pets."
+    note for Task "#95;#95;post_init#95;#95; normalizes time to HH:MM and raises ValueError for a bad time,<br/>frequency (once, daily, weekly) or priority (low, medium, high)."
+    note for Task "Recurrence: completing a daily/weekly task copies it<br/>with due_date = max(due_date, today) + 1 or 7 days."

@@ -1,0 +1,39 @@
+classDiagram
+    class Task {
+        -String description
+        -String time
+        -String frequency
+        -date dueDate
+        -bool completed
+        -String priority
+        +markComplete() void
+    }
+
+    class Pet {
+        -String name
+        -String breed
+        -List~Task~ tasks
+        +addTask(task) void
+        +removeTask(task) void
+    }
+
+    class Owner {
+        -String name
+        -List~Pet~ pets
+        +addPet(pet) void
+        +getAllTasks() List~Task~
+    }
+
+    class Scheduler {
+        -Owner owner
+        +getTodaysSchedule() List~Task~
+        +sortByTime(tasks) List~Task~
+        +filterTasks(petName, completed) List~Task~
+        +detectConflicts() List~String~
+        +markTaskComplete(pet, task) Task
+    }
+
+    Owner "1" --> "0..*" Pet : has
+    Pet "1" --> "0..*" Task : has
+    Scheduler --> Owner : reads tasks from
+    Scheduler ..> Task : sorts, filters, schedules
