@@ -1,0 +1,60 @@
+%% PawPal+ AI Agent: system architecture (DRAFT, planned design)
+%% Dashed = RAG phase 2 (not built yet). Update at the end to match the real code.
+flowchart TB
+    subgraph IN["1 · Input"]
+        User(["👤 Pet owner"])
+        UI["Streamlit chat<br/>app.py"]
+        CLI["CLI demo<br/>pawpal_cli.py"]
+    end
+
+    subgraph PROC["2 · Process"]
+        InGuard{"Input guardrails<br/>scope · length · medical"}
+        Agent["Agent loop · agent.py<br/>plan → act → check → repair"]
+        Gemini[["Gemini API<br/>free tier"]]
+        Tools["Tools · agent_tools.py<br/>+ tool guardrails<br/>allowlist · arg checks · call cap"]
+        Core["PawPal+ core<br/>pawpal_system.py<br/>Scheduler · Task validation"]
+        RAG["Retriever + knowledge docs<br/>(phase 2)"]
+    end
+
+    subgraph OUT["3 · Output"]
+        OutGuard{"Self-check + output check<br/>re-verify schedule · confidence 0–1<br/>reply matches tool results"}
+        Reply["Reply + updated schedule<br/>+ step trace + confidence"]
+        Data[("data.json")]
+        Logs[("logs/agent.jsonl")]
+    end
+
+    subgraph CHECK["Human & testing checkpoints"]
+        Confirm{"🧑 Owner confirms<br/>destructive actions"}
+        Tests["pytest · fake LLM<br/>no API key"]
+        Evals["evals/run_evals.py<br/>~15 cases → pass rate"]
+        Dev(["🧑‍💻 Developer reviews<br/>eval results + logs"])
+    end
+
+    User --> UI --> InGuard
+    User --> CLI --> InGuard
+    InGuard -->|"blocked → refusal"| Reply
+    InGuard -->|"allowed"| Agent
+    Agent <-->|"function calls"| Gemini
+    Agent <-->|"call / result"| Tools
+    Tools --> Core
+    Tools -.-> RAG
+    Core -->|"save on success"| Data
+    Agent --> OutGuard --> Reply --> UI
+    Agent -.->|"every step"| Logs
+
+    Tools -->|"remove_task"| Confirm
+    Confirm -->|"yes / no"| Tools
+    Tests -.->|"verify"| Agent
+    Evals -->|"run cases"| Agent
+    Evals --> Dev
+    Logs --> Dev
+    Dev -->|"fix prompts · tools · guardrails"| Agent
+
+    classDef human fill:#fff4d6,stroke:#c99a00,color:#000
+    classDef guard fill:#ffe3e3,stroke:#c0392b,color:#000
+    classDef store fill:#e8f0fe,stroke:#3367d6,color:#000
+    classDef future fill:#f4f4f4,stroke:#999,stroke-dasharray:5 5,color:#555
+    class User,Confirm,Dev human
+    class InGuard,OutGuard guard
+    class Data,Logs store
+    class RAG future
