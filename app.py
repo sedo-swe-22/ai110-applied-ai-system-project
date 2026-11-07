@@ -1,7 +1,16 @@
+import json
 from pathlib import Path
 
 import streamlit as st
+from dotenv import load_dotenv
+
+from agent import AgentResult, PawPalAgent
+from agent_tools import execute_pending
+from llm_client import GeminiClient, LLMError
+from logging_config import log_event, setup_agent_logger
 from pawpal_system import Owner, Pet, Scheduler, Task
+
+load_dotenv(Path(__file__).with_name(".env"))
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -83,6 +92,110 @@ if owner.pets:
     st.write(f"{owner.name}'s pets: " + ", ".join(f"{p.name} ({p.breed})" for p in owner.pets))
 else:
     st.info("No pets yet. Add one above.")
+
+# ---------------------------------------------------------------------------
+# 🤖 Assistant: the Gemini-powered agent (agent.py) working on the same data
+# ---------------------------------------------------------------------------
+
+st.divider()
+st.subheader("🤖 Assistant")
+st.caption(
+    'Ask in plain English, e.g. "Add a 9am walk for Max tomorrow", "What\'s on today?" or '
+    '"Move Mochi\'s grooming to 11:00". Every step is shown below the reply and logged to logs/agent.jsonl.'
+)
+
+agent_logger = setup_agent_logger()
+st.session_state.setdefault("chat", [])
+st.session_state.setdefault("pending", [])
+
+
+def get_llm_client():
+    """Create the Gemini client once per session; return None if the key is missing."""
+    if "llm_client" not in st.session_state:
+        try:
+            st.session_state.llm_client = GeminiClient(logger=agent_logger)
+        except LLMError as exc:
+            st.session_state.llm_setup_error = str(exc)
+            return None
+    return st.session_state.llm_client
+
+
+def render_result(result: AgentResult) -> None:
+    """Show one agent reply with its actions, checks, confidence and step trace."""
+    st.markdown(result.reply)
+    if result.blocked:
+        st.caption(f"🛡️ Blocked by an input guardrail ({result.block_reason}). Gemini was not called.")
+        return
+    if result.failed:
+        st.error(f"Run failed and was rolled back: {result.error}")
+    if result.actions_taken:
+        st.markdown("**Actions taken**\n" + "\n".join(f"- {a}" for a in result.actions_taken))
+    for warning in result.output_warnings:
+        st.warning(warning, icon="🛡️")
+    if not result.failed:
+        check = {True: "✅ passed", False: "❌ failed", None: "n/a (nothing changed)"}[result.checks_passed]
+        conf = f"{result.confidence:.2f}" if result.confidence is not None else "n/a"
+        reason = f" ({result.confidence_reason})" if result.confidence_reason else ""
+        st.caption(f"Self-check: {check} · Confidence: {conf}{reason}")
+    with st.expander(f"Agent steps: {len(result.steps)} tool call(s), {result.llm_calls} model call(s) · run {result.run_id}"):
+        if not result.steps:
+            st.write("No tools were called.")
+        for s in result.steps:
+            status = "ok" if s.ok else f"error: {s.result.get('error')}"
+            tag = " · blocked by guardrail" if s.blocked else ""
+            st.markdown(f"**{s.n}. `{s.tool}`** → {status}{tag} ({s.ms} ms)")
+            st.code(json.dumps({"args": s.args, "result": s.result}, indent=2, ensure_ascii=False), language="json")
+        for line in result.check_details:
+            st.text(line)
+
+
+for message in st.session_state.chat:
+    with st.chat_message(message["role"]):
+        if message["role"] == "user":
+            st.markdown(message["text"])
+        else:
+            render_result(message["result"])
+
+if "assistant_flash" in st.session_state:
+    st.success(st.session_state.pop("assistant_flash"))
+
+# Destructive actions wait here until the owner confirms. The app (not the model) deletes.
+for i, (run_id, action) in enumerate(list(st.session_state.pending)):
+    st.warning(f"**Needs your confirmation:** {action.summary}", icon="🗑️")
+    confirm_col, cancel_col = st.columns(2)
+    if confirm_col.button("Confirm delete", key=f"confirm-{run_id}-{i}", type="primary"):
+        outcome = execute_pending(owner, action)
+        log_event(agent_logger, "pending_confirmed", run_id, action=action.summary,
+                  ok=outcome["ok"], error=outcome.get("error"))
+        st.session_state.pending.pop(i)
+        if outcome["ok"]:
+            save()
+            st.session_state.assistant_flash = outcome["summary"]
+        else:
+            st.session_state.assistant_flash = f"Could not delete: {outcome['error']}"
+        st.rerun()
+    if cancel_col.button("Cancel", key=f"cancel-{run_id}-{i}"):
+        log_event(agent_logger, "pending_cancelled", run_id, action=action.summary)
+        st.session_state.pending.pop(i)
+        st.session_state.assistant_flash = f"Cancelled: {action.summary}. Nothing was deleted."
+        st.rerun()
+
+llm_client = get_llm_client()
+if llm_client is None:
+    st.info(
+        "The assistant needs a Gemini API key. Copy `.env.example` to `.env`, set "
+        "`GEMINI_API_KEY`, then restart the app. The rest of PawPal+ works without it."
+    )
+
+prompt = st.chat_input("Ask PawPal+ to plan your pets' care…", disabled=llm_client is None)
+if prompt and llm_client is not None:
+    agent = PawPalAgent(owner, llm_client, logger=agent_logger, save_fn=save)
+    with st.spinner("PawPal+ is planning…"):
+        result = agent.run(prompt)
+    st.session_state.chat.append({"role": "user", "text": prompt})
+    st.session_state.chat.append({"role": "assistant", "result": result})
+    st.session_state.pending = [(result.run_id, a) for a in result.pending_actions]
+    st.rerun()  # redraw so the schedule below shows the agent's changes
 
 st.markdown("### Tasks")
 
