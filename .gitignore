@@ -6,8 +6,12 @@ __pycache__/
 # PawPal+ saved data
 data.json
 data.json.bak
+demo.json
 
 
 # Environment variables
 *.env
 .env
+
+# Agent logs (curated traces are exported to docs/traces/, which IS committed)
+logs/
