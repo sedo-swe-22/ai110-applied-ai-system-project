@@ -150,9 +150,12 @@ class Scheduler:
         """Create a scheduler for the given owner."""
         self.owner = owner
 
-    def get_todays_schedule(self) -> list[Task]:
-        """Return today's incomplete tasks, ordered by time then priority."""
-        today = date.today()
+    def get_todays_schedule(self, today: Optional[date] = None) -> list[Task]:
+        """Return today's incomplete tasks, ordered by time then priority.
+
+        `today` defaults to the real date; tests and the agent can pass a fixed one.
+        """
+        today = today or date.today()
         tasks = [
             t
             for t in self.owner.get_all_tasks()
@@ -248,12 +251,15 @@ class Scheduler:
             warnings.append(message)
         return warnings
 
-    def mark_task_complete(self, pet: Pet, task: Task) -> Optional[Task]:
+    def mark_task_complete(
+        self, pet: Pet, task: Task, today: Optional[date] = None
+    ) -> Optional[Task]:
         """Complete a task and, if recurring, add and return the next occurrence.
 
         The next due date is max(due_date, today) plus the interval, so a late task
         never spawns an occurrence in the past and an early one keeps its schedule.
         Completing an already-completed task is a no-op, so it never spawns duplicates.
+        `today` defaults to the real date; tests and the agent can pass a fixed one.
         """
         if task.completed:
             return None
@@ -261,7 +267,7 @@ class Scheduler:
         days = {"daily": 1, "weekly": 7}.get(task.frequency)
         if days is None:
             return None
-        base = max(task.due_date, date.today())
+        base = max(task.due_date, today or date.today())
         next_task = replace(
             task, due_date=base + timedelta(days=days), completed=False
         )
