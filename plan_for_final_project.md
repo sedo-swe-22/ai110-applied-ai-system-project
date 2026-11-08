@@ -70,7 +70,7 @@ From the course page: once all required features are done, use this checklist to
 | README.md | ❌ | Still the Module 2 README; rewrite on docs day (§8) |
 | model_card.md | ❌ | Not created yet. **Note:** it must hold the *reflections* (AI collaboration, **biases**, testing results), not only the model description |
 | Diagram in `diagrams/` | ✅ | `diagrams/architecture.mmd` (Mermaid). Update it to match the final code |
-| Reproducible execution evidence | ❌ | Planned: `scripts/record_evidence.sh` → `docs/evidence/cli_runs.md`, `docs/evidence/test_results.txt`, `docs/traces/*.md` (fixed `--today`, `--reset-demo`) |
+| Reproducible execution evidence | ✅ first run (Nov 7) | `scripts/record_evidence.sh` → `docs/evidence/cli_runs.md` (9 cases, all exit 0), `docs/evidence/test_results.txt` (152 passed), 3 traces in `docs/traces/`. **Re-run on docs day** so it matches the final code |
 | Images only in `/assets` or `/diagrams` | ✅ | `diagrams/uml_final.png` from Module 2; `assets/` exists (empty). Put any screenshots in `assets/` |
 | Multiple meaningful commits | ✅ | 13 commits, including 8 small feature commits (code + tests each) |
 | README identifies base project | ❌ | Add an "Original project" section (PawPal+, Module 2) |
@@ -374,7 +374,9 @@ The AI assistant (Claude Code) does the following. The student owns the design d
 **Reproducibility**
 - [x] Version ranges in `requirements.txt`, `.env.example`, and `.gitignore` (`logs/`, `.env`, `demo.json`)
 - [ ] Run a fresh-clone setup check (new venv → install → `pytest`) and fix anything that breaks
-- [ ] `scripts/record_evidence.sh` + `docs/evidence/` (CLI runs, test results) + `docs/traces/` (reproducible execution evidence)
+- [x] `scripts/record_evidence.sh` + `docs/evidence/` (CLI runs, test results) + `docs/traces/` (reproducible execution evidence). First run Nov 7; `--offline` mode needs no key
+- [ ] Re-run `scripts/record_evidence.sh` on docs day (Nov 14), after the final code changes
+- [x] Traces are a readable decision chain (model decisions → tool calls → self-check → outcome) with the raw log lines at the bottom
 
 **Documentation drafts (the student reviews and edits them)**
 - [ ] A Mermaid architecture diagram (`.mmd` + embedded in the README) that matches the final code
