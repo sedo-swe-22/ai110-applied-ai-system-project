@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 from agent import AgentResult, PawPalAgent
 from agent_tools import execute_pending
-from llm_client import GeminiClient, LLMClient, LLMError
+from llm_client import GeminiClient, LLMClient, LLMError, UnavailableClient
 from logging_config import export_trace, log_event, setup_agent_logger
 from pawpal_system import Owner, Pet, Task
 
@@ -140,8 +140,10 @@ def main(argv: Optional[Sequence[str]] = None, client: Optional[LLMClient] = Non
         try:
             client = GeminiClient(model=args.model, logger=logger)
         except LLMError as exc:
-            print(f"Setup problem: {exc}", file=out)
-            return 1
+            # Guardrails never need Gemini, so blocked requests still get their normal
+            # reply; anything that needs the model fails cleanly with this message.
+            print(f"Setup problem: {exc}\n(Guardrail checks still work without a key.)\n", file=out)
+            client = UnavailableClient(str(exc))
 
     save = lambda: owner.save_to_json(str(args.data))  # noqa: E731
     agent = PawPalAgent(owner, client, logger=logger, save_fn=save, today=today,

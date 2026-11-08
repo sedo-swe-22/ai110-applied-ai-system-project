@@ -100,6 +100,23 @@ class LLMClient(Protocol):
         ...
 
 
+class UnavailableClient:
+    """Stand-in used when Gemini can't be set up (e.g. no API key).
+
+    The agent's input guardrails run before any model call, so blocked requests
+    still get their normal reply. Any request that needs the model fails with
+    `reason`, and the agent turns that into a clean failed run (nothing saved).
+    """
+
+    model = "unavailable"
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    def generate(self, system_prompt: str, history: list[dict], tools: list[dict]) -> LLMResponse:
+        raise LLMError(self.reason)
+
+
 class GeminiClient:
     """`LLMClient` backed by the Gemini API, with retry and backoff on rate limits."""
 
