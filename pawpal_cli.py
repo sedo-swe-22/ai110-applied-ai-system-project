@@ -59,6 +59,7 @@ def print_result(result: AgentResult, out=sys.stdout) -> None:
     w(f"PawPal+: {result.reply}")
     if result.blocked:
         w(f"\n[guardrail] request blocked ({result.block_reason}); Gemini was not called.")
+        w(f"\nrun_id: {result.run_id}  (details in logs/agent.jsonl)")
         return
     if result.failed:
         w(f"\n[error] {result.error}  (all changes rolled back)")
@@ -153,7 +154,12 @@ def main(argv: Optional[Sequence[str]] = None, client: Optional[LLMClient] = Non
     if args.export_trace:
         for handler in logger.handlers:
             handler.flush()
-        print(f"Trace written to {export_trace(result.run_id)}", file=out)
+        path = export_trace(result.run_id, title=args.request)
+        try:
+            shown = path.resolve().relative_to(PROJECT_DIR)  # no home-folder paths in shared output
+        except ValueError:
+            shown = path
+        print(f"Trace written to {shown}", file=out)
     return 1 if result.failed else 0
 
 

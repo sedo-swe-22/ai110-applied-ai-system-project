@@ -100,19 +100,101 @@ def export_trace(
     out_dir: Optional[Path | str] = None,
     title: Optional[str] = None,
 ) -> Path:
-    """Write one run's records as a markdown trace and return the file path."""
+    """Write one run's records as a readable markdown trace and return the file path.
+
+    The top half is the agent's decision chain in plain language; the raw JSON-lines
+    records follow at the bottom, so nothing from the log is lost.
+    """
     records = read_run(run_id, log_path)
     if not records:
         raise ValueError(f"no log records found for run {run_id!r}")
     out = Path(out_dir) if out_dir else DEFAULT_TRACE_DIR
     out.mkdir(parents=True, exist_ok=True)
-    lines = [f"# Agent trace: {title or run_id}", "", f"- **run_id:** `{run_id}`", f"- **started:** {records[0]['ts']}", ""]
-    lines += ["| # | Event | Details |", "|---|---|---|"]
-    skip = {"ts", "level", "event", "run_id"}
-    for i, record in enumerate(records, 1):
-        details = {k: v for k, v in record.items() if k not in skip}
-        text = json.dumps(details, ensure_ascii=False, default=str).replace("|", "\\|")
-        lines.append(f"| {i} | `{record['event']}` | `{text}` |")
+
+    start = records[0]
+    lines = [
+        f"# Agent trace: {title or start.get('message') or run_id}",
+        "",
+        "| Field | Value |",
+        "|---|---|",
+        f"| run_id | `{run_id}` |",
+        f"| started (UTC) | {start['ts']} |",
+        f"| model | {start.get('model', '?')} |",
+        f"| today (as seen by the agent) | {start.get('today', '?')} |",
+        f"| few-shot examples | {'on' if start.get('few_shot') else 'off'} |",
+        "",
+        f"**User request:** {start.get('message', '')}",
+        "",
+        "## Decision chain",
+        "",
+    ]
+    step = 0
+    for record in records:
+        line = _describe(record)
+        if line:
+            step += 1
+            lines.append(f"{step}. {line}")
+    lines += [
+        "",
+        "## Raw log records",
+        "",
+        f"The exact lines from `logs/agent.jsonl` for this run ({len(records)} records).",
+        "",
+        "```json",
+        *(json.dumps(r, ensure_ascii=False, default=str) for r in records),
+        "```",
+    ]
     path = out / f"trace_{run_id}.md"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+def _short(value: Any, limit: int = 300) -> str:
+    text = json.dumps(value, ensure_ascii=False, default=str)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _describe(r: dict) -> Optional[str]:
+    """One plain-language line per log event (None = skip)."""
+    event = r.get("event")
+    if event == "run_start":
+        return None  # shown in the header
+    if event == "input_blocked":
+        return f"🛡️ **Input guardrail blocked the request** (reason: `{r.get('reason')}`). Gemini was not called."
+    if event == "llm_call":
+        tools = r.get("tool_calls") or []
+        if tools:
+            return f"🤖 **Model call {r.get('turn')}** ({r.get('ms')} ms): decided to call `{'`, `'.join(tools)}`."
+        return f"🤖 **Model call {r.get('turn')}** ({r.get('ms')} ms): wrote the final reply: {_short(r.get('text', ''))}"
+    if event in ("tool_call", "tool_blocked"):
+        result = r.get("result") or {}
+        status = "ok" if r.get("ok") else f"**error:** {result.get('error')}"
+        what = result.get("summary") or _short({k: v for k, v in result.items() if k != "ok"}, 240)
+        prefix = "🛡️ **Tool guardrail blocked**" if event == "tool_blocked" else "🔧 **Tool**"
+        return f"{prefix} `{r.get('tool')}({_short(r.get('args', {}), 200)})` → {status}. {what}"
+    if event == "llm_retry":
+        return f"⏳ Gemini returned `{r.get('code')}`; waited {r.get('delay_s')}s and retried (attempt {r.get('attempt')})."
+    if event == "llm_quota_exhausted":
+        return f"⛔ Daily Gemini quota used up for {r.get('model')} (limit {r.get('limit')}/day)."
+    if event == "self_check":
+        verdict = {True: "passed", False: "FAILED", None: "n/a (nothing changed)"}.get(r.get("checks_passed"))
+        details = "; ".join(d.strip() for d in r.get("details") or [])
+        return (f"✅ **Self-check (code):** {verdict}. {details} "
+                f"Model confidence {r.get('model_confidence')}, final confidence {r.get('confidence')}.")
+    if event == "output_warning":
+        return f"⚠️ **Output check:** {r.get('warning')}"
+    if event == "saved":
+        return "💾 Changes saved to the data file."
+    if event == "run_failed":
+        return f"❌ **Run failed:** {r.get('error')}"
+    if event == "rollback":
+        return "↩️ All changes from this run were rolled back."
+    if event == "pending_confirmed":
+        return f"🗑️ Owner **confirmed**: {r.get('action')} → {'done' if r.get('ok') else r.get('error')}."
+    if event == "pending_cancelled":
+        return f"🚫 Owner **cancelled**: {r.get('action')}. Nothing was deleted."
+    if event == "run_end":
+        pending = r.get("pending") or []
+        extra = f" Waiting for confirmation: {'; '.join(pending)}." if pending else ""
+        return f"🏁 Run ended with status **{r.get('status')}**.{extra}"
+    return f"`{event}` {_short({k: v for k, v in r.items() if k not in {'ts', 'level', 'event', 'run_id'}})}"

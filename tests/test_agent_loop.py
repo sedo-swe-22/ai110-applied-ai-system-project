@@ -8,7 +8,7 @@ import pytest
 from agent import PawPalAgent, build_system_prompt, split_confidence
 from agent_tools import execute_pending
 from llm_client import LLMError, LLMResponse, ToolCall
-from logging_config import JsonLineFormatter, read_run, setup_agent_logger
+from logging_config import JsonLineFormatter, export_trace, read_run, setup_agent_logger
 from pawpal_system import Owner, Pet, Task
 
 TODAY = date(2026, 11, 10)
@@ -247,6 +247,15 @@ def test_every_step_is_logged_with_run_id(owner, tmp_path):
     assert "self_check" in events
     for line in log_path.read_text().splitlines():
         json.loads(line)  # every line is valid JSON
+
+    trace = export_trace(result.run_id, log_path=log_path, out_dir=tmp_path / "traces", title="Walk Max").read_text()
+    assert trace.startswith("# Agent trace: Walk Max")
+    assert "| model | fake-model |" in trace and "| today (as seen by the agent) | 2026-11-10 |" in trace
+    assert "## Decision chain" in trace
+    assert "decided to call `add_task`" in trace
+    assert "🔧 **Tool** `add_task(" in trace and "Added Max's 'Walk' at 09:00 on 2026-11-11" in trace
+    assert "**Self-check (code):** passed" in trace
+    assert "## Raw log records" in trace and f'"run_id": "{result.run_id}"' in trace
     for handler in list(logger.handlers):
         if getattr(handler, "baseFilename", "") == str(log_path.resolve()):
             logger.removeHandler(handler)
