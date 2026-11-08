@@ -61,23 +61,25 @@ From the course page: once all required features are done, use this checklist to
 - [ ] **Demo evidence is included:** Your README.md contains at least 2-3 example inputs with their outputs pasted as fenced code blocks that demonstrate your system's behavior without relying on a video. A Loom walkthrough is optional but helpful for human reviewers; if you include one, add the link to your README.
 - [ ] **Final changes are committed and pushed before the deadline**
 
-**Status (checked Nov 7)**
-| Item | Status | What's left |
-|---|---|---|
-| Pushed to the correct repo | ⚠️ Partly | Remote is `sedo-swe-22/ai110-applied-ai-system-project`. **8 local commits are not pushed yet**, plus uncommitted Flash-Lite changes |
-| Repo is public | ✅ | GitHub's API returns the repo without logging in (HTTP 200) |
-| Runnable code | ✅ | Agent, guardrails, CLI and Streamlit app; 152 tests pass |
-| README.md | ❌ | Still the Module 2 README; rewrite on docs day (§8) |
-| model_card.md | ❌ | Not created yet. **Note:** it must hold the *reflections* (AI collaboration, **biases**, testing results), not only the model description |
-| Diagram in `diagrams/` | ✅ | `diagrams/architecture.mmd` (Mermaid). Update it to match the final code |
-| Reproducible execution evidence | ✅ first run (Nov 7) | `scripts/record_evidence.sh` → `docs/evidence/cli_runs.md` (9 cases, all exit 0), `docs/evidence/test_results.txt` (152 passed), 3 traces in `docs/traces/`. **Re-run on docs day** so it matches the final code |
-| Images only in `/assets` or `/diagrams` | ✅ | `diagrams/uml_final.png` from Module 2; `assets/` exists (empty). Put any screenshots in `assets/` |
-| Multiple meaningful commits | ✅ | 13 commits, including 8 small feature commits (code + tests each) |
-| README identifies base project | ❌ | Add an "Original project" section (PawPal+, Module 2) |
-| model_card answers reflection prompts | ❌ | AI collaboration (accepted/rejected suggestions), **biases**, testing results |
-| README has 2–3 example inputs/outputs in fenced code blocks | ❌ | Copy from `docs/evidence/cli_runs.md` (real runs only) |
-| Loom walkthrough (optional) | — | Optional; add the link to the README if recorded |
-| Final changes pushed before the deadline | ⏳ | Target Sun Nov 15, 9 PM EST |
+**Status (reviewed Nov 8, against the live GitHub repo and a fresh clone)**
+| # | Item | Status | Evidence / what's left |
+|---|---|---|---|
+| 1 | Pushed to the correct repo | ✅ for now | `main` = `origin/main` at `sedo-swe-22/ai110-applied-ai-system-project`. Confirm this is the repo name the course expects; push again at the end |
+| 2 | Repo is public | ✅ | GitHub API: `private: false`, `visibility: public` |
+| 3a | Runnable code | ✅ | Fresh clone + new venv: install works and all tests pass with **no `.env`**. Bug found and fixed Nov 8: without a key, even guardrail-blocked requests failed. Now guardrails work without a key, and requests that need Gemini fail cleanly (exit 1, nothing saved). `scripts/record_evidence.sh --offline` verified on a key-less clone |
+| 3b | Comprehensive README.md | ❌ | Exists, but it is still all Module 2 content; no mention of the agent, Gemini, the CLI or the model card. Rewrite on docs day (§8) |
+| 3c | model_card.md | ❌ | **Missing.** Must hold the *reflections* (AI collaboration, **biases**, testing results), not only the model description |
+| 3d | Mermaid diagram in `diagrams/` | ⚠️ | `diagrams/architecture.mmd` exists but **doesn't match the code yet**: it shows `evals/run_evals.py` (not built) and leaves out `llm_client.py` and `logging_config.py`. Update after step 5 and on docs day |
+| 4 | Reproducible execution evidence | ✅ first run (Nov 7) | `scripts/record_evidence.sh` → `docs/evidence/cli_runs.md` (9 cases, all exit 0, header at clean commit `d36d464`), `docs/evidence/test_results.txt`, 3 traces in `docs/traces/`. **Re-run on docs day** so it matches the final code |
+| 4b | Images only in `/assets` or `/diagrams` | ✅ | Only `diagrams/uml_final.png` (Module 2). `assets/` is empty, so git doesn't store it; it appears once screenshots are added |
+| 5 | Multiple meaningful commits | ✅ | 17 commits, mostly small and focused, with code and tests together |
+| 6a | README identifies base project | ❌ | Add an "Original project" section (PawPal+, Module 2). Embed `architecture.mmd` as a Mermaid block; the old `uml_final.png` can stay as a supplement |
+| 6b | model_card answers reflection prompts | ❌ | AI collaboration (accepted/rejected suggestions), **biases**, testing results |
+| 7 | README has 2–3 example inputs/outputs in fenced code blocks | ❌ | Current code blocks are Module 2 (`python main.py`). Copy agent examples from `docs/evidence/cli_runs.md` (real runs only) |
+| 7b | Loom walkthrough (optional) | — | Optional; add the link to the README if recorded |
+| 8 | Final changes pushed before the deadline | ⏳ | Target Sun Nov 15, 9 PM EST |
+
+**Remaining work, by date:** step 5 (evals) → update the diagram (3d) → docs day Nov 14: README (3b, 6a, 7), `model_card.md` (3c, 6b), re-run the evidence script (4) → final push (8).
 
 **New items this checklist adds to the plan**
 - **Biases section in `model_card.md`.** Not planned before. Ideas to cover:
@@ -373,8 +375,9 @@ The AI assistant (Claude Code) does the following. The student owns the design d
 
 **Reproducibility**
 - [x] Version ranges in `requirements.txt`, `.env.example`, and `.gitignore` (`logs/`, `.env`, `demo.json`)
-- [ ] Run a fresh-clone setup check (new venv → install → `pytest`) and fix anything that breaks
-- [x] `scripts/record_evidence.sh` + `docs/evidence/` (CLI runs, test results) + `docs/traces/` (reproducible execution evidence). First run Nov 7; `--offline` mode needs no key
+- [ ] Repeat the fresh-clone check after the final push (Nov 15)
+- [x] `scripts/record_evidence.sh` + `docs/evidence/` (CLI runs, test results) + `docs/traces/` (reproducible execution evidence). First run Nov 7; `--offline` mode needs no key (verified on a fresh clone Nov 8)
+- [x] Fresh-clone setup check (Nov 8): new venv → `pip install -r requirements.txt` → `pytest` passes with no `.env`. Found and fixed the no-key CLI bug (guardrails now work without a key)
 - [ ] Re-run `scripts/record_evidence.sh` on docs day (Nov 14), after the final code changes
 - [x] Traces are a readable decision chain (model decisions → tool calls → self-check → outcome) with the raw log lines at the bottom
 
