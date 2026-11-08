@@ -41,13 +41,53 @@ The final project asks for an upgrade to an earlier project that adds RAG, an ag
 | **Wed Nov 11 (evening)** | **RAG go/no-go** | Go only if steps 1–5 are done and stable |
 | Thu Nov 12 – Fri Nov 13 | 7 · RAG phase 2 (**if go**); otherwise polish + extra eval runs | RAG before/after recorded, or skipped deliberately |
 | Sat Nov 14 | 6 · Docs | README, `model_card.md`, final diagram, `docs/traces/`, reflection |
-| Sun Nov 15 | 8 · Presentation and portfolio + final checks | Fresh-clone test passes; slides or video done; **submitted by 9 PM EST** |
+| Sun Nov 15 | 8 · Presentation and portfolio + final checks | Fresh-clone test passes; slides done; **every Submission Checklist item ticked**; **submitted by 9 PM EST** |
 
 **Timeline notes**
 - **Free-tier quota is per day.** Spread real-Gemini eval runs over Nov 10–13 instead of doing them all on one day. Don't leave evals until the weekend.
 - **Docs come after RAG on purpose:** the diagram and README must match the final code. If RAG is a no-go, start docs on Thu Nov 12 for extra buffer.
 - **Keep reflection notes daily.** It's much easier than reconstructing them on Nov 14.
 - **If you fall behind,** cut in this order: RAG → few-shot bonus → human-eval size (minimum ~5 cases). Never cut tests, guardrails, README or the diagram; those are required points.
+
+## Submission Checklist (reference + status)
+From the course page: once all required features are done, use this checklist to prepare the submission.
+
+- [ ] **Code is pushed to the correct GitHub repository**
+- [ ] **Repo is public**
+- [ ] **Required files are present:** You must include your runnable functional code, a comprehensive README.md, a model_card.md for reflections, and a System Architecture Diagram saved as a Mermaid source file (.mmd or .md with Mermaid code block) in a diagrams/ folder.
+- [ ] **Reproducible Execution Evidence:** Instead of demo screenshots, include reproducible command outputs or interaction logs in markdown or .txt files. Your diagram source file and any optional supplementary images should be stored in dedicated /assets or /diagrams folders.
+- [ ] **Commit history shows multiple meaningful commits**
+- [ ] **Standardized Documentation:** Your README.md must identify your base project, and your model_card.md must answer all reflection prompts regarding AI collaboration, biases, and testing results.
+- [ ] **Demo evidence is included:** Your README.md contains at least 2-3 example inputs with their outputs pasted as fenced code blocks that demonstrate your system's behavior without relying on a video. A Loom walkthrough is optional but helpful for human reviewers; if you include one, add the link to your README.
+- [ ] **Final changes are committed and pushed before the deadline**
+
+**Status (checked Nov 7)**
+| Item | Status | What's left |
+|---|---|---|
+| Pushed to the correct repo | ⚠️ Partly | Remote is `sedo-swe-22/ai110-applied-ai-system-project`. **8 local commits are not pushed yet**, plus uncommitted Flash-Lite changes |
+| Repo is public | ✅ | GitHub's API returns the repo without logging in (HTTP 200) |
+| Runnable code | ✅ | Agent, guardrails, CLI and Streamlit app; 152 tests pass |
+| README.md | ❌ | Still the Module 2 README; rewrite on docs day (§8) |
+| model_card.md | ❌ | Not created yet. **Note:** it must hold the *reflections* (AI collaboration, **biases**, testing results), not only the model description |
+| Diagram in `diagrams/` | ✅ | `diagrams/architecture.mmd` (Mermaid). Update it to match the final code |
+| Reproducible execution evidence | ❌ | Planned: `scripts/record_evidence.sh` → `docs/evidence/cli_runs.md`, `docs/evidence/test_results.txt`, `docs/traces/*.md` (fixed `--today`, `--reset-demo`) |
+| Images only in `/assets` or `/diagrams` | ✅ | `diagrams/uml_final.png` from Module 2; `assets/` exists (empty). Put any screenshots in `assets/` |
+| Multiple meaningful commits | ✅ | 13 commits, including 8 small feature commits (code + tests each) |
+| README identifies base project | ❌ | Add an "Original project" section (PawPal+, Module 2) |
+| model_card answers reflection prompts | ❌ | AI collaboration (accepted/rejected suggestions), **biases**, testing results |
+| README has 2–3 example inputs/outputs in fenced code blocks | ❌ | Copy from `docs/evidence/cli_runs.md` (real runs only) |
+| Loom walkthrough (optional) | — | Optional; add the link to the README if recorded |
+| Final changes pushed before the deadline | ⏳ | Target Sun Nov 15, 9 PM EST |
+
+**New items this checklist adds to the plan**
+- **Biases section in `model_card.md`.** Not planned before. Ideas to cover:
+  - Pet-care assumptions in the prompt and examples (dogs and walks, not all species).
+  - English-only, US-style time phrasing ("9am"), and the US-only ASPCA number in the emergency reply.
+  - The keyword guardrails can over-block (e.g. normal symptom words) or under-block (phrasings they don't know).
+  - Gemini's choices when a request is ambiguous.
+- **`model_card.md` is where the reflection goes,** so the reflection notes from `reflection.md` feed into it (keep `reflection.md` too, or point it to the model card).
+- **Screenshots are optional extras, not evidence.** Text outputs and logs are the evidence; screenshots go in `assets/` only.
+- **Video is optional** (Loom). The student checklist below now treats it as optional.
 
 ## Key design decisions (from the plan review)
 | Topic | Decision |
@@ -144,13 +184,16 @@ Use `st.chat_input` and `st.chat_message` to show the reply. Add an expander tha
   - **Guardrail examples table:** Input / Behavior / Result, from real runs
   - **Testing summary:** a few lines in the required style, with links to `evals/results.md`
   - **Known limitations**
-- **`model_card.md` (required, needed for two bonuses):**
+- **`model_card.md` (required; it holds the reflections, and two bonuses need it):**
+  - **reflection prompts:** how AI was used (prompting, debugging, design), suggestions accepted and rejected, limitations and future improvements
+  - **biases:** pet/species and language assumptions, US-only emergency info, guardrail over- and under-blocking, model choices on ambiguous requests
   - intended use, limitations, failure modes and safety choices (including the free-tier privacy note)
   - eval tables
   - the human-eval table
   - the few-shot baseline-vs-specialized comparison
   - the RAG before/after comparison (phase 2)
-- `ai_interactions.md` links to `docs/traces/`. `reflection.md` collects the running reflection notes.
+- `ai_interactions.md` links to `docs/traces/`. `reflection.md` collects the running reflection notes, which feed the model card.
+- **Reproducible execution evidence:** `scripts/record_evidence.sh` regenerates `docs/evidence/cli_runs.md` (each command with its full output, plus date, model and git commit), `docs/evidence/test_results.txt` (`pytest -v`) and 2–3 traces in `docs/traces/`. Run it once now, then again on docs day so the evidence matches the final code. Gemini's wording can vary between runs; the tool calls and final schedule are what should match.
 - Add `google-genai`, `python-dotenv` and `pyyaml` to `requirements.txt`.
 - In the README, explain both AIs: Gemini powers the app, and Claude was the development assistant.
 
@@ -307,21 +350,31 @@ The AI assistant (Claude Code) does the following. The student owns the design d
 
 **Implementation notes (differences from the plan)**
 - `pawpal_system.py`: `get_todays_schedule()` and `mark_task_complete()` take an optional `today` parameter, so tests and evals can use a fixed date. Existing behavior is unchanged and all 63 original tests still pass.
-- **Default model is `gemini-3.5-flash`.** Checked Nov 6 on the free-tier key: `gemini-2.5-flash` returned 404 ("no longer available to new users"); `gemini-3.8-flash` hit repeated 504/503 server errors; `gemini-3.5-flash` completed full runs.
+- **Default model is now `gemini-3.5-flash-lite`** (changed Nov 7). History on the free-tier key:
+  - `gemini-2.5-flash` returned 404 ("no longer available to new users").
+  - `gemini-3.8-flash` hit repeated 504/503 server errors.
+  - `gemini-3.5-flash` worked, but during Streamlit testing its free quota ran out after a few chats. A probe confirmed the quota is `GenerateRequestsPerDayPerProjectPerModel-FreeTier`, with a **limit of 20 requests/day**.
+  - `gemini-3.5-flash-lite` handled clash repair (5 tool calls), a reschedule and a clarifying question correctly, and has a much larger free daily quota (~500/day according to forum reports, not yet confirmed by us).
+- **Daily quota handling:** a 429 caused by the *daily* quota now fails fast with a clear message ("resets at midnight Pacific, or change PAWPAL_MODEL") instead of retrying for 5 minutes. The quota name and limit are logged (`llm_quota_exhausted`). Per-minute 429s still wait and retry. Covered by `tests/test_llm_client.py`.
+- **Eval budget:** each chat uses ~3–5 requests, so a ~15-case eval run uses ~45–75 requests. That fits Flash-Lite's quota; it would not fit Flash's 20/day.
 - Live runs exposed two missing reliability features, both now fixed: a request **timeout** (a stuck call used to block forever) and a **lower thinking level** (long thinking caused 504 deadline errors). Good material for the reflection.
 - The tests caught a bug: the confidence parser missed Gemini's markdown bold (`**CONFIDENCE:** 0.9`). Fixed.
-- [ ] Phase 1: tool registry, prompt built in sections, eval tags and the `Retriever` interface (room for RAG)
+
+**Still to build**
+- [ ] Room for RAG, part done: tool registry ✅ and prompt sections ✅; eval tags and the `Retriever` interface still to do
 - [ ] Phase 2: `knowledge/` docs, a retriever implementation and the `lookup_care_guidelines` tool
-- [ ] Self-check / confidence step (now planned, not optional) + confidence recorded by the eval harness
+- [x] Self-check / confidence step (in `agent.py`)
+- [ ] Confidence recorded by the eval harness
 
 **Testing and evaluation**
 - [x] Unit tests for tools and guardrails, plus loop and CLI tests with a fake client (no API key): `tests/test_agent_tools.py`, `test_guardrails.py`, `test_agent_loop.py`, `test_cli.py`
 - [ ] `evals/cases.yaml` (draft cases for the student to review) and `evals/run_evals.py` with a pass/fail summary
-- [ ] Keep the existing 63 PawPal tests passing after every change
+- [x] Keep the existing 63 PawPal tests passing after every change (ongoing; true so far)
 
 **Reproducibility**
-- [ ] Pin `requirements.txt`, add `.env.example`, and update `.gitignore` (`logs/`, `.env`)
+- [x] Version ranges in `requirements.txt`, `.env.example`, and `.gitignore` (`logs/`, `.env`, `demo.json`)
 - [ ] Run a fresh-clone setup check (new venv → install → `pytest`) and fix anything that breaks
+- [ ] `scripts/record_evidence.sh` + `docs/evidence/` (CLI runs, test results) + `docs/traces/` (reproducible execution evidence)
 
 **Documentation drafts (the student reviews and edits them)**
 - [ ] A Mermaid architecture diagram (`.mmd` + embedded in the README) that matches the final code
@@ -365,9 +418,10 @@ The AI assistant (Claude Code) does the following. The student owns the design d
 - [ ] README "original project" section: confirm the draft is accurate
 
 **Communicating the results**
-- [ ] Screenshots of the app and a demo video (if one is required)
+- [ ] Optional: screenshots (in `assets/`) and a Loom walkthrough (link in the README). Neither replaces the text evidence
 - [ ] Presentation slides and talk
 - [ ] Portfolio entry and final submission
+- [ ] Go through the Submission Checklist (top of this file) before submitting
 
 **Git**
 - [ ] Decide when to commit and push
