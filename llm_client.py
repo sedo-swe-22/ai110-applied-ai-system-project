@@ -21,10 +21,14 @@ from typing import Any, Callable, Optional, Protocol
 
 from logging_config import log_event, null_logger
 
-# Model notes (checked 2026-11-06 on a free-tier key): gemini-2.5-flash returns 404
-# "no longer available to new users"; gemini-3.8-flash hit repeated 504/503 overload errors;
-# gemini-3.5-flash completed full tool-calling runs reliably. Override with PAWPAL_MODEL.
-DEFAULT_MODEL = "gemini-3.5-flash"
+# Model notes (free-tier key, checked 2026-11-06/07):
+# - gemini-2.5-flash: 404 "no longer available to new users".
+# - gemini-3.8-flash: repeated 504/503 overload errors.
+# - gemini-3.5-flash: works, but the free daily quota ran out after ~25 calls (a few chats).
+# - gemini-3.5-flash-lite: handled add + clash repair, reschedule and clarifying questions
+#   correctly, with a much larger free daily quota. PawPal+ doesn't need a bigger model.
+# Override with PAWPAL_MODEL.
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TIMEOUT_S = 60.0
 DEFAULT_THINKING = "LOW"  # MINIMAL / LOW / MEDIUM / HIGH, or DEFAULT for the model's own choice
 
@@ -50,19 +54,42 @@ class LLMResponse:
 MAX_SERVER_DELAY_S = 60.0
 
 
-def _server_retry_delay(exc: Exception) -> Optional[float]:
-    """Read Gemini's suggested wait (RetryInfo.retryDelay like "37s"), capped at 60s."""
+def _error_details(exc: Exception) -> list[dict]:
     details = getattr(exc, "details", None)
     if not isinstance(details, dict):
-        return None
-    for item in (details.get("error") or {}).get("details") or []:
-        if isinstance(item, dict) and str(item.get("@type", "")).endswith("RetryInfo"):
+        return []
+    items = (details.get("error") or {}).get("details") or []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _server_retry_delay(exc: Exception) -> Optional[float]:
+    """Read Gemini's suggested wait (RetryInfo.retryDelay like "37s"), capped at 60s."""
+    for item in _error_details(exc):
+        if str(item.get("@type", "")).endswith("RetryInfo"):
             text = str(item.get("retryDelay", "")).rstrip("s")
             try:
                 return min(float(text), MAX_SERVER_DELAY_S)
             except ValueError:
                 return None
     return None
+
+
+def quota_violation(exc: Exception) -> Optional[dict]:
+    """Return the quota a 429 hit, e.g. {"quota_id": "GenerateRequestsPerDay...", "limit": "20"}."""
+    for item in _error_details(exc):
+        if str(item.get("@type", "")).endswith("QuotaFailure"):
+            for violation in item.get("violations") or []:
+                return {
+                    "quota_id": violation.get("quotaId"),
+                    "metric": violation.get("quotaMetric"),
+                    "limit": violation.get("quotaValue"),
+                }
+    return None
+
+
+def is_daily_quota(violation: Optional[dict]) -> bool:
+    """True when the per-day quota is used up; waiting a minute won't help then."""
+    return bool(violation and "perday" in str(violation.get("quota_id", "")).lower())
 
 
 class LLMClient(Protocol):
@@ -187,10 +214,20 @@ class GeminiClient:
                 return self._parse(response)
             except errors.APIError as exc:
                 code = getattr(exc, "code", None)
+                quota = quota_violation(exc) if code == 429 else None
+                if is_daily_quota(quota):
+                    # Retrying can't help until the quota resets, so fail fast with a clear message.
+                    log_event(self.logger, "llm_quota_exhausted", self.run_id, level=logging.ERROR,
+                              model=self.model, **quota)
+                    limit = f" ({quota['limit']} requests/day)" if quota.get("limit") else ""
+                    raise LLMError(
+                        f"The free daily Gemini quota for {self.model}{limit} is used up. It resets at "
+                        "midnight Pacific time, or set PAWPAL_MODEL to another model in .env."
+                    ) from exc
                 if code in self.RETRY_CODES and attempt < self.max_retries:
                     delay = _server_retry_delay(exc) or self.base_delay * (2 ** attempt)
                     log_event(self.logger, "llm_retry", self.run_id, level=logging.WARNING,
-                              code=code, attempt=attempt + 1, delay_s=delay)
+                              code=code, attempt=attempt + 1, delay_s=delay, **(quota or {}))
                     self.sleep(delay)
                     attempt += 1
                     continue
