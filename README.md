@@ -12,8 +12,8 @@ It is my CodePath AI110 final project (Project 4: Applied AI System), built by e
 
 This project extends **PawPal+**, my Module 2 project
 ([original repo](https://github.com/sedo-swe-22/ai110-module2show-pawpal-starter)).
-This repo starts from an exact copy of it (commit `327cc83`, imported from Module 2's
-final commit `2f9c537`), so the git history shows everything added since.
+This repo starts from an exact copy of it (imported from Module 2's
+final commit), so the git history shows everything added since.
 
 **Original goal:** help a busy pet owner keep up with daily pet care.
 
@@ -237,6 +237,7 @@ python -m pawpal_cli --data demo.json --reset-demo --today 2026-11-10 "Feed Moch
 ```bash
 scripts/record_evidence.sh            # all cases (uses ~25 Gemini free-tier requests)
 scripts/record_evidence.sh --offline  # only the cases that never call Gemini, plus pytest
+scripts/record_evidence.sh --tests-only  # only refresh docs/evidence/test_results.txt
 ```
 
 ---
@@ -364,11 +365,11 @@ python -m pytest
 | `tests/test_agent_tools.py` | 24 | Every tool, task refs, bad input returned as errors, deletion only after confirmation |
 | `tests/test_agent_loop.py` | 19 | The agent loop with a fake LLM: clash repair, self-check, call cap, rollback, logging, traces, confidence parsing |
 | `tests/test_cli.py` | 8 | The CLI end to end, including running without an API key |
-| `tests/test_llm_client.py` | 6 | Retries, timeouts and the daily-quota stop |
+| `tests/test_llm_client.py` | 8 | Retries with growing waits (server errors and timeouts), the daily-quota stop |
 
 Full output: [`docs/evidence/test_results.txt`](docs/evidence/test_results.txt).
 
-**Testing summary:** all 155 automated tests pass. All 9 recorded real-Gemini CLI cases exited cleanly and behaved as expected when I reviewed them (3 guardrail blocks, 1 clarifying question, 1 deletion that correctly waited for confirmation, and 4 schedule changes or answers); the self-check passed on every run that changed the schedule, and the model's confidence averaged 0.92 across the 6 runs that reached Gemini. Testing also found and fixed real problems: the confidence line was missed when Gemini used bold text, a stuck API call could hang forever (now a 60-second timeout), retries wasted minutes on a used-up daily quota (now a clear message), and without an API key even guardrail checks failed (now they work without a key). A scored evaluation harness is still to come.
+**Testing summary:** all 157 automated tests pass. All 9 recorded real-Gemini CLI cases exited cleanly and behaved as expected when I reviewed them (3 guardrail blocks, 1 clarifying question, 1 deletion that correctly waited for confirmation, and 4 schedule changes or answers); the self-check passed on every run that changed the schedule, and the model's confidence averaged 0.92 across the 6 runs that reached Gemini. Testing also found and fixed real problems: the confidence line was missed when Gemini used bold text, a stuck API call could hang forever (now a 60-second timeout), retries wasted minutes on a used-up daily quota (now a clear message), and without an API key even guardrail checks failed (now they work without a key). A scored evaluation harness is still to come.
 
 ---
 
@@ -404,7 +405,7 @@ Full output: [`docs/evidence/test_results.txt`](docs/evidence/test_results.txt).
 ├── logging_config.py       JSON-lines logging and trace export
 ├── pawpal_system.py        Module 2 core (Owner, Pet, Task, Scheduler)
 ├── main.py                 Module 2 demo script
-├── tests/                  155 tests (no API key needed)
+├── tests/                  157 tests (no API key needed)
 ├── scripts/record_evidence.sh
 ├── docs/evidence/          Recorded CLI runs and test results
 ├── docs/traces/            Readable agent traces
