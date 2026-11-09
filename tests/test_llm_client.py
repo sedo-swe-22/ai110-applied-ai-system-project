@@ -83,6 +83,24 @@ def test_server_errors_back_off_then_give_up():
     assert sleeps == [2.0, 4.0, 8.0]
 
 
+class ReadTimeout(Exception):
+    """Stands in for httpx.ReadTimeout (the class name is what the client checks)."""
+
+
+def test_timeouts_back_off_like_server_errors():
+    client, sleeps = make_client([ReadTimeout("slow"), ReadTimeout("slow"), ok_response("Made it")])
+    result = client.generate("system", [{"role": "user", "text": "hi"}], [])
+    assert result.text == "Made it"
+    assert sleeps == [2.0, 4.0]  # grows each time instead of a fixed 2s
+
+
+def test_timeouts_give_up_after_max_retries():
+    client, sleeps = make_client([ReadTimeout("slow")] * 4)
+    with pytest.raises(LLMError, match="Could not reach Gemini: ReadTimeout"):
+        client.generate("system", [{"role": "user", "text": "hi"}], [])
+    assert sleeps == [2.0, 4.0, 8.0]
+
+
 def test_missing_key_is_a_clear_setup_error(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(LLMError, match="GEMINI_API_KEY is not set"):

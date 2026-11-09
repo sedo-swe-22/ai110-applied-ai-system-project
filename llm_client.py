@@ -255,9 +255,10 @@ class GeminiClient:
                 raise
             except Exception as exc:  # timeouts, network problems, SDK bugs, ...
                 if "timeout" in type(exc).__name__.lower() and attempt < self.max_retries:
+                    delay = self.base_delay * (2 ** attempt)  # same backoff as server errors
                     log_event(self.logger, "llm_retry", self.run_id, level=logging.WARNING,
-                              code="timeout", attempt=attempt + 1, delay_s=self.base_delay)
-                    self.sleep(self.base_delay)
+                              code="timeout", attempt=attempt + 1, delay_s=delay)
+                    self.sleep(delay)
                     attempt += 1
                     continue
                 raise LLMError(f"Could not reach Gemini: {type(exc).__name__}: {exc}") from exc
