@@ -1,53 +1,61 @@
-%% PawPal+ AI Agent: system architecture (DRAFT, planned design)
-%% Dashed = RAG phase 2 (not built yet). Update at the end to match the real code.
+%% PawPal+ AI Agent: system architecture (matches the code as of 2026-11-08)
+%% Solid = built. Dashed = planned, not built yet (eval harness, RAG phase 2).
+%% Keep this in sync with the code; the README embeds a copy of this diagram.
 flowchart TB
     subgraph IN["1 · Input"]
         User(["👤 Pet owner"])
-        UI["Streamlit chat<br/>app.py"]
-        CLI["CLI demo<br/>pawpal_cli.py"]
+        UI["Streamlit chat · app.py<br/>or CLI · pawpal_cli.py<br/>(same agent, same data)"]
     end
 
     subgraph PROC["2 · Process"]
-        InGuard{"Input guardrails<br/>scope · length · medical"}
-        Agent["Agent loop · agent.py<br/>plan → act → check → repair"]
-        Gemini[["Gemini API<br/>free tier"]]
-        Tools["Tools · agent_tools.py<br/>+ tool guardrails<br/>allowlist · arg checks · call cap"]
-        Core["PawPal+ core<br/>pawpal_system.py<br/>Scheduler · Task validation"]
-        RAG["Retriever + knowledge docs<br/>(phase 2)"]
+        InGuard{"Input guardrails · guardrails.py<br/>length · prompt injection · emergency<br/>medical advice · off-topic"}
+        Agent["Agent loop · agent.py<br/>plan → call tools → check → repair<br/>max 10 tool calls"]
+        LLM["LLM client · llm_client.py<br/>retry + backoff · 60s timeout<br/>stop on daily quota"]
+        Gemini[["Gemini API<br/>gemini-3.5-flash-lite · free tier"]]
+        ToolGuard{"Tool guardrails · guardrails.py<br/>allowlist · dates within 365 days"}
+        Tools["Tools · agent_tools.py<br/>9 tools · task refs like Max:2<br/>errors returned, never raised"]
+        Core["PawPal+ core · pawpal_system.py<br/>Owner · Pet · Task · Scheduler<br/>Task validation"]
+        RAG["Retriever + pet-care docs<br/>(RAG phase 2, planned)"]
     end
 
     subgraph OUT["3 · Output"]
-        OutGuard{"Self-check + output check<br/>re-verify schedule · confidence 0–1<br/>reply matches tool results"}
-        Reply["Reply + updated schedule<br/>+ step trace + confidence"]
-        Data[("data.json")]
-        Logs[("logs/agent.jsonl")]
+        Check{"Self-check · agent.py<br/>change exists? clash-free?<br/>+ model confidence → score<br/>Output check · guardrails.py"}
+        Reply["Reply + actions taken<br/>+ step trace + confidence"]
+        Data[("data.json<br/>saved on success ·<br/>rolled back on failure")]
+        Logs[("logs/agent.jsonl<br/>logging_config.py")]
     end
 
     subgraph CHECK["Human & testing checkpoints"]
-        Confirm{"🧑 Owner confirms<br/>destructive actions"}
-        Tests["pytest · fake LLM<br/>no API key"]
-        Evals["evals/run_evals.py<br/>~15 cases → pass rate"]
-        Dev(["🧑‍💻 Developer reviews<br/>eval results + logs"])
+        Confirm{"🧑 Owner confirms<br/>deletions"}
+        Tests["pytest · fake LLM<br/>no API key needed"]
+        Evidence["scripts/record_evidence.sh<br/>→ docs/evidence/ · docs/traces/"]
+        Evals["evals/run_evals.py<br/>(planned)"]
+        Dev(["🧑‍💻 Developer reviews<br/>evidence, traces + logs"])
     end
 
     User --> UI --> InGuard
-    User --> CLI --> InGuard
-    InGuard -->|"blocked → refusal"| Reply
+    InGuard -->|"blocked: fixed reply,<br/>Gemini not called"| Reply
     InGuard -->|"allowed"| Agent
-    Agent <-->|"function calls"| Gemini
-    Agent <-->|"call / result"| Tools
+    Agent <-->|"prompt + tool schemas /<br/>function calls + text"| LLM
+    LLM <--> Gemini
+    Agent -->|"function call"| ToolGuard
+    ToolGuard -->|"ok"| Tools
+    Tools -.->|"result or error"| Agent
+    ToolGuard -.->|"rejected → error to model"| Agent
     Tools --> Core
     Tools -.-> RAG
-    Core -->|"save on success"| Data
-    Agent --> OutGuard --> Reply --> UI
+    Core --> Data
+    Agent --> Check --> Reply
+    Reply --> UI
     Agent -.->|"every step"| Logs
 
-    Tools -->|"remove_task"| Confirm
-    Confirm -->|"yes / no"| Tools
+    Tools -->|"remove_task →<br/>pending action"| Confirm
+    Confirm -->|"confirm: app/CLI deletes"| Core
     Tests -.->|"verify"| Agent
-    Evals -->|"run cases"| Agent
-    Evals --> Dev
-    Logs --> Dev
+    Evidence -->|"real CLI runs"| Agent
+    Evals -.->|"run cases"| Agent
+    Logs --> Evidence
+    Evidence --> Dev
     Dev -->|"fix prompts · tools · guardrails"| Agent
 
     classDef human fill:#fff4d6,stroke:#c99a00,color:#000
@@ -55,6 +63,6 @@ flowchart TB
     classDef store fill:#e8f0fe,stroke:#3367d6,color:#000
     classDef future fill:#f4f4f4,stroke:#999,stroke-dasharray:5 5,color:#555
     class User,Confirm,Dev human
-    class InGuard,OutGuard guard
+    class InGuard,ToolGuard,Check guard
     class Data,Logs store
-    class RAG future
+    class RAG,Evals future
