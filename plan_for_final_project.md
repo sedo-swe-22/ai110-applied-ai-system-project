@@ -67,15 +67,15 @@ From the course page: once all required features are done, use this checklist to
 | 1 | Pushed to the correct repo | ✅ for now | `main` = `origin/main` at `sedo-swe-22/ai110-applied-ai-system-project`. Confirm this is the repo name the course expects; push again at the end |
 | 2 | Repo is public | ✅ | GitHub API: `private: false`, `visibility: public` |
 | 3a | Runnable code | ✅ | Fresh clone + new venv: install works and all tests pass with **no `.env`**. Bug found and fixed Nov 8: without a key, even guardrail-blocked requests failed. Now guardrails work without a key, and requests that need Gemini fail cleanly (exit 1, nothing saved). `scripts/record_evidence.sh --offline` verified on a key-less clone |
-| 3b | Comprehensive README.md | ❌ | Exists, but it is still all Module 2 content; no mention of the agent, Gemini, the CLI or the model card. Rewrite on docs day (§8) |
+| 3b | Comprehensive README.md | ✅ draft (Nov 8, local) | Rewritten for the final project: base project, new features, architecture (embedded Mermaid), setup, run, 3 real example runs, guardrails table, testing summary, limitations, structure. **Student review / own-voice edit still to do.** Update again when evals/RAG land |
 | 3c | model_card.md | ❌ | **Missing.** Must hold the *reflections* (AI collaboration, **biases**, testing results), not only the model description |
-| 3d | Mermaid diagram in `diagrams/` | ⚠️ | `diagrams/architecture.mmd` exists but **doesn't match the code yet**: it shows `evals/run_evals.py` (not built) and leaves out `llm_client.py` and `logging_config.py`. Update after step 5 and on docs day |
+| 3d | Mermaid diagram in `diagrams/` | ✅ (Nov 8) | `diagrams/architecture.mmd` now matches the code: every file it names exists, and its numbers (9 tools, 10-call cap, 365-day window, 60s timeout, model) were checked against the code. Evals and RAG are dashed as planned. **Update again when evals/RAG are built** |
 | 4 | Reproducible execution evidence | ✅ first run (Nov 7) | `scripts/record_evidence.sh` → `docs/evidence/cli_runs.md` (9 cases, all exit 0, header at clean commit `d36d464`), `docs/evidence/test_results.txt`, 3 traces in `docs/traces/`. **Re-run on docs day** so it matches the final code |
 | 4b | Images only in `/assets` or `/diagrams` | ✅ | Only `diagrams/uml_final.png` (Module 2). `assets/` is empty, so git doesn't store it; it appears once screenshots are added |
 | 5 | Multiple meaningful commits | ✅ | 17 commits, mostly small and focused, with code and tests together |
-| 6a | README identifies base project | ❌ | Add an "Original project" section (PawPal+, Module 2). Embed `architecture.mmd` as a Mermaid block; the old `uml_final.png` can stay as a supplement |
+| 6a | README identifies base project | ✅ draft (Nov 8, local) | "Base project: PawPal+ (Module 2)" section: link to the Module 2 repo, baseline commits, original goal and capabilities, where it stopped, what this project adds |
 | 6b | model_card answers reflection prompts | ❌ | AI collaboration (accepted/rejected suggestions), **biases**, testing results |
-| 7 | README has 2–3 example inputs/outputs in fenced code blocks | ❌ | Current code blocks are Module 2 (`python main.py`). Copy agent examples from `docs/evidence/cli_runs.md` (real runs only) |
+| 7 | README has 2–3 example inputs/outputs in fenced code blocks | ✅ draft (Nov 8, local) | 3 real runs (clash repair, deletion waits, medical refusal), copied verbatim from `docs/evidence/cli_runs.md` by script. Refresh them after the docs-day evidence re-run |
 | 7b | Loom walkthrough (optional) | — | Optional; add the link to the README if recorded |
 | 8 | Final changes pushed before the deadline | ⏳ | Target Sun Nov 15, 9 PM EST |
 
