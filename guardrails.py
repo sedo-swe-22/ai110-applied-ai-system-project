@@ -38,6 +38,14 @@ MEDICAL_REPLY = (
     "I can help you schedule things, for example: \"Give Max his meds at 8am daily\" or "
     "\"Add a vet visit for Max on Friday at 3pm\"."
 )
+# A message that mixes a scheduling request with a medical question is refused as a
+# whole (safety first), so the reply must say clearly that nothing was done.
+MEDICAL_MIXED_REPLY = (
+    "Part of your message asks for medical advice (such as a dose or a diagnosis), which I can't "
+    "give. Please ask your vet about that. To be safe I didn't make any changes, including the "
+    "scheduling part. Send the scheduling request on its own, for example \"Add a 9am walk for Max "
+    "tomorrow\", and I'll take care of it."
+)
 OFF_TOPIC_REPLY = (
     "I'm PawPal+, a pet-care scheduling assistant. I can add, move, complete or remove care "
     "tasks for your pets, show today's schedule and fix time clashes."
@@ -116,7 +124,8 @@ def check_input(text: str, pet_names: Iterable[str] = ()) -> InputVerdict:
         or (SAFETY_WORD.search(message) and is_question)
         or (SYMPTOM.search(message) and is_question and not wants_scheduling)
     ):
-        return InputVerdict(False, "medical_advice", MEDICAL_REPLY)
+        reply = MEDICAL_MIXED_REPLY if wants_scheduling else MEDICAL_REPLY
+        return InputVerdict(False, "medical_advice", reply)
     mentions_pet = any(
         re.search(rf"\b{re.escape(name)}\b", message, re.IGNORECASE) for name in pet_names if name
     )

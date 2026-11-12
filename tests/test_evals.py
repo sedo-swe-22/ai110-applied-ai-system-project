@@ -48,7 +48,7 @@ ADD_SIMPLE = {
 def test_real_cases_file_is_valid():
     data = load_cases()
     assert data["today"] == "2026-11-10"
-    assert len(data["cases"]) == 18
+    assert len(data["cases"]) == 24
     assert {"agent", "guardrail"} <= {t for c in data["cases"] for t in c["tags"]}
 
 
@@ -189,3 +189,69 @@ def test_main_end_to_end_with_fake_client(tmp_path):
     assert code == 0, out.getvalue()
     assert "Few-shot on: 2/2 passed (100%)" in out.getvalue()
     assert (tmp_path / "results.md").exists() and list((tmp_path / "runs").glob("run_*.json"))
+
+
+# --- The harder cases: a scripted good agent must pass, a scripted bad agent must fail. ---
+# This checks the pass rules in cases.yaml themselves (too loose or too strict) without Gemini.
+
+def _case(case_id):
+    return next(c for c in load_cases()["cases"] if c["id"] == case_id)
+
+
+T = "2026-11-11"
+HARD_SCRIPTS = {
+    "ambiguous_walk": (
+        [say("Which walk do you mean: today's or tomorrow's?")],
+        [calls("reschedule_task", {"ref": "Max:0", "time": "09:00"}), calls("check_conflicts", {}), say("Moved.")],
+    ),
+    "clash_existing_breakfast": (
+        [calls("add_task", {"pet_name": "Max", "description": "Breakfast", "time": "07:30", "due_date": "today"}),
+         calls("check_conflicts", {}),
+         calls("find_free_slot", {"date": "today", "after": "07:30"}),
+         calls("reschedule_task", {"ref": "Max:3", "time": "07:45"}),
+         calls("check_conflicts", {}), say("Added Max's breakfast at 07:45.")],
+        # Bad: moves Mochi's existing breakfast instead of its own new task.
+        [calls("add_task", {"pet_name": "Max", "description": "Breakfast", "time": "07:30", "due_date": "today"}),
+         calls("reschedule_task", {"ref": "Mochi:0", "time": "07:45"}),
+         calls("check_conflicts", {}), say("Done.")],
+    ),
+    "bulk_shift": (
+        [calls("list_tasks", {"due_date": T}),
+         calls("reschedule_task", {"ref": "Max:2", "time": "09:00"}),
+         calls("reschedule_task", {"ref": "Mochi:1", "time": "11:00"}),
+         calls("check_conflicts", {}), say("Moved both tasks back an hour.")],
+        # Bad: forgets Mochi's grooming.
+        [calls("reschedule_task", {"ref": "Max:2", "time": "09:00"}), calls("check_conflicts", {}), say("Done.")],
+    ),
+    "far_future_date": (
+        [calls("add_task", {"pet_name": "Max", "description": "Vet visit", "time": "10:00", "due_date": "2028-01-15"}),
+         say("That date is more than a year away. Can you confirm it?")],
+        # Bad: "fixes" the date on its own and adds the task anyway.
+        [calls("add_task", {"pet_name": "Max", "description": "Vet visit", "time": "10:00", "due_date": "2026-01-15"}),
+         say("Added the vet visit.")],
+    ),
+    "invalid_time": (
+        [calls("add_task", {"pet_name": "Mochi", "description": "Walk", "time": "25:00", "due_date": T}),
+         say("25:00 isn't a valid time. What time did you mean?")],
+        # Bad: invents a time after the error.
+        [calls("add_task", {"pet_name": "Mochi", "description": "Walk", "time": "25:00", "due_date": T}),
+         calls("add_task", {"pet_name": "Mochi", "description": "Walk", "time": "01:00", "due_date": T}),
+         say("Added at 01:00.")],
+    ),
+}
+
+
+@pytest.mark.parametrize("case_id", sorted(HARD_SCRIPTS))
+def test_hard_case_rules_pass_good_and_fail_bad_behavior(case_id):
+    good, bad = HARD_SCRIPTS[case_id]
+    good_record = run_case(_case(case_id), FakeClient(good), TODAY, few_shot=True)
+    assert good_record["passed"], good_record["failed_checks"]
+    bad_record = run_case(_case(case_id), FakeClient(bad), TODAY, few_shot=True)
+    assert not bad_record["passed"], "the pass rule is too loose: bad behavior passed"
+
+
+def test_mixed_request_case_is_refused_with_a_clear_message():
+    client = FakeClient([])
+    record = run_case(_case("mixed_safe_and_unsafe"), client, TODAY, few_shot=True)
+    assert record["passed"], record["failed_checks"]
+    assert client.calls == 0

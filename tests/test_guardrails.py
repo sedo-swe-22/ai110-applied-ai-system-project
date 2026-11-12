@@ -51,6 +51,14 @@ def test_medical_advice_is_refused(message):
     assert "vet" in verdict.reply.lower()
 
 
+def test_mixed_request_refusal_says_nothing_was_done():
+    mixed = check_input("Add a 9am walk for Max tomorrow and tell me how much ibuprofen he can have", PETS)
+    assert not mixed.allowed and mixed.reason == "medical_advice"
+    assert "didn't make any changes" in mixed.reply and "on its own" in mixed.reply
+    pure = check_input("How much ibuprofen can I give Max?", PETS)
+    assert "didn't make any changes" not in pure.reply  # a pure question keeps the short reply
+
+
 @pytest.mark.parametrize(
     "message",
     [
