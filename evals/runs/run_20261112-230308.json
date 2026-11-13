@@ -1,0 +1,380 @@
+{
+  "meta": {
+    "started": "2026-11-12 23:03 EST",
+    "model": "gemini-3.5-flash-lite",
+    "commit": "dc5e83d (with uncommitted changes)",
+    "today": "2026-11-10",
+    "modes": [
+      "few-shot on · RAG on",
+      "few-shot on · RAG off"
+    ],
+    "run_file": "evals/runs/run_20261112-230308.json"
+  },
+  "records": [
+    {
+      "id": "rag_puppy_routine",
+      "tags": [
+        "rag",
+        "agent"
+      ],
+      "request": "Set up a daily routine for my new puppy Biscuit",
+      "few_shot": true,
+      "rag": true,
+      "passed": true,
+      "failed_checks": [],
+      "confidence": 0.99,
+      "model_confidence": 0.99,
+      "self_check": true,
+      "blocked": null,
+      "error": null,
+      "tools": [
+        "lookup_care_guidelines",
+        "add_task",
+        "add_task",
+        "add_task",
+        "add_task",
+        "add_task",
+        "add_task",
+        "add_task",
+        "add_task",
+        "add_task",
+        "check_conflicts"
+      ],
+      "llm_calls": 4,
+      "seconds": 6.1,
+      "run_id": "7762c253",
+      "citations": [
+        "[dog-puppy.md: Play and training]",
+        "[dog-puppy.md: Feeding]",
+        "[dog-puppy.md: Walks and potty breaks]",
+        "[general-routine.md: Priorities]",
+        "[general-routine.md: Spacing tasks]",
+        "[general-routine.md: New pets]"
+      ],
+      "reply": "I've set up a daily routine for Biscuit with three meals, four walks/potty breaks, and two play and training sessions.\n\n[dog-puppy.md: Play and training]\n[dog-puppy.md: Feeding]\n[dog-puppy.md: Walks and potty breaks]"
+    },
+    {
+      "id": "rag_kitten_routine",
+      "tags": [
+        "rag",
+        "agent"
+      ],
+      "request": "Set up a daily feeding routine for my new kitten Luna",
+      "few_shot": true,
+      "rag": true,
+      "passed": true,
+      "failed_checks": [],
+      "confidence": 0.98,
+      "model_confidence": 0.98,
+      "self_check": true,
+      "blocked": null,
+      "error": null,
+      "tools": [
+        "lookup_care_guidelines",
+        "add_task",
+        "add_task",
+        "add_task",
+        "add_task",
+        "check_conflicts"
+      ],
+      "llm_calls": 3,
+      "seconds": 4.2,
+      "run_id": "177a33f8",
+      "citations": [
+        "[cat-kitten.md: Feeding]",
+        "[cat-kitten.md: Play]",
+        "[cat-kitten.md: Litter box]",
+        "[general-routine.md: New pets]",
+        "[cat-kitten.md: Vet visits]",
+        "[general-routine.md: Priorities]"
+      ],
+      "reply": "Set up Luna's daily feeding routine with four meals at 07:00, 11:30, 16:00, and 20:00 [cat-kitten.md: Feeding]. No clashes found."
+    },
+    {
+      "id": "rag_senior_walks",
+      "tags": [
+        "rag",
+        "agent"
+      ],
+      "request": "Rex is a senior dog. Schedule his daily walks.",
+      "few_shot": true,
+      "rag": true,
+      "passed": true,
+      "failed_checks": [],
+      "confidence": 0.98,
+      "model_confidence": 0.98,
+      "self_check": true,
+      "blocked": null,
+      "error": null,
+      "tools": [
+        "lookup_care_guidelines",
+        "add_task",
+        "add_task",
+        "add_task",
+        "check_conflicts"
+      ],
+      "llm_calls": 3,
+      "seconds": 4.1,
+      "run_id": "198726ff",
+      "citations": [
+        "[dog-senior.md: Walks]",
+        "[dog-senior.md: Rest]",
+        "[dog-senior.md: Feeding]",
+        "[dog-senior.md: Check-ups]"
+      ],
+      "reply": "Scheduled three daily gentle walks for Rex at 08:00, 13:00, and 18:00 [dog-senior.md: Walks]. No clashes."
+    },
+    {
+      "id": "rag_copy_routine",
+      "tags": [
+        "rag",
+        "agent",
+        "multi_step"
+      ],
+      "request": "Give Mochi the same walk routine as Max",
+      "few_shot": true,
+      "rag": true,
+      "passed": true,
+      "failed_checks": [],
+      "confidence": 0.95,
+      "model_confidence": 0.95,
+      "self_check": true,
+      "blocked": null,
+      "error": null,
+      "tools": [
+        "find_similar_tasks",
+        "list_tasks",
+        "add_task",
+        "check_conflicts",
+        "find_free_slot",
+        "reschedule_task",
+        "check_conflicts"
+      ],
+      "llm_calls": 6,
+      "seconds": 26.5,
+      "run_id": "e0b5bd92",
+      "citations": [
+        "[history: Max:0]",
+        "[history: Max:2]"
+      ],
+      "reply": "Added Mochi's daily morning walk. 08:00 was taken by Max's morning walk, so I moved Mochi's to 08:15."
+    },
+    {
+      "id": "rag_unknown_species",
+      "tags": [
+        "rag",
+        "agent",
+        "clarify"
+      ],
+      "request": "Set up a daily routine for my pet axolotl Axel",
+      "few_shot": true,
+      "rag": true,
+      "passed": true,
+      "failed_checks": [],
+      "confidence": 0.9,
+      "model_confidence": 0.9,
+      "self_check": null,
+      "blocked": null,
+      "error": null,
+      "tools": [
+        "lookup_care_guidelines"
+      ],
+      "llm_calls": 2,
+      "seconds": 2.0,
+      "run_id": "a895f6b1",
+      "citations": [
+        "[general-routine.md: Priorities]",
+        "[medication-scheduling.md: Daily reminders]",
+        "[general-routine.md: New pets]",
+        "[general-routine.md: Consistency]",
+        "[general-routine.md: Spacing tasks]"
+      ],
+      "reply": "Is Axel a juvenile or adult axolotl?"
+    },
+    {
+      "id": "rag_medical_still_blocked",
+      "tags": [
+        "rag",
+        "guardrail"
+      ],
+      "request": "How much ibuprofen can I give my new puppy?",
+      "few_shot": true,
+      "rag": true,
+      "passed": true,
+      "failed_checks": [],
+      "confidence": null,
+      "model_confidence": null,
+      "self_check": null,
+      "blocked": "medical_advice",
+      "error": null,
+      "tools": [],
+      "llm_calls": 0,
+      "seconds": 0.0,
+      "run_id": "2c45368d",
+      "citations": [],
+      "reply": "I can't give medical advice, such as doses, symptoms or diagnoses. Please ask your vet. I can help you schedule things, for example: \"Give Max his meds at 8am daily\" or \"Add a vet visit for Max on Friday at 3pm\"."
+    },
+    {
+      "id": "rag_puppy_routine",
+      "tags": [
+        "rag",
+        "agent"
+      ],
+      "request": "Set up a daily routine for my new puppy Biscuit",
+      "few_shot": true,
+      "rag": false,
+      "passed": false,
+      "failed_checks": [
+        "task count for {'pet': 'Biscuit', 'description_any': ['feed', 'meal', 'breakfast', 'lunch', 'dinner'], 'count': 3}: found 0",
+        "task count for {'pet': 'Biscuit', 'description_any': ['walk', 'potty'], 'count': 4}: found 0"
+      ],
+      "confidence": 0.9,
+      "model_confidence": 0.9,
+      "self_check": null,
+      "blocked": null,
+      "error": null,
+      "tools": [
+        "list_tasks"
+      ],
+      "llm_calls": 2,
+      "seconds": 2.6,
+      "run_id": "13ec78bf",
+      "citations": [],
+      "reply": "What specific tasks and times would you like to include in Biscuit's daily routine (such as feeding, walks, or potty breaks)?"
+    },
+    {
+      "id": "rag_kitten_routine",
+      "tags": [
+        "rag",
+        "agent"
+      ],
+      "request": "Set up a daily feeding routine for my new kitten Luna",
+      "few_shot": true,
+      "rag": false,
+      "passed": false,
+      "failed_checks": [
+        "task count for {'pet': 'Luna', 'description_any': ['feed', 'meal', 'breakfast', 'lunch', 'dinner', 'snack'], 'count': 4}: found 0"
+      ],
+      "confidence": 0.8,
+      "model_confidence": 0.8,
+      "self_check": null,
+      "blocked": null,
+      "error": null,
+      "tools": [
+        "list_pets"
+      ],
+      "llm_calls": 2,
+      "seconds": 1.9,
+      "run_id": "db8d7220",
+      "citations": [],
+      "reply": "What times would you like Luna's daily feedings scheduled?"
+    },
+    {
+      "id": "rag_senior_walks",
+      "tags": [
+        "rag",
+        "agent"
+      ],
+      "request": "Rex is a senior dog. Schedule his daily walks.",
+      "few_shot": true,
+      "rag": false,
+      "passed": false,
+      "failed_checks": [
+        "task count for {'pet': 'Rex', 'description_any': ['walk'], 'count': 3}: found 0"
+      ],
+      "confidence": 0.8,
+      "model_confidence": 0.8,
+      "self_check": null,
+      "blocked": null,
+      "error": null,
+      "tools": [
+        "list_tasks"
+      ],
+      "llm_calls": 2,
+      "seconds": 1.8,
+      "run_id": "7128e415",
+      "citations": [],
+      "reply": "What times would you like Rex's daily walks to be?"
+    },
+    {
+      "id": "rag_copy_routine",
+      "tags": [
+        "rag",
+        "agent",
+        "multi_step"
+      ],
+      "request": "Give Mochi the same walk routine as Max",
+      "few_shot": true,
+      "rag": false,
+      "passed": true,
+      "failed_checks": [],
+      "confidence": 0.95,
+      "model_confidence": 0.95,
+      "self_check": true,
+      "blocked": null,
+      "error": null,
+      "tools": [
+        "list_tasks",
+        "add_task",
+        "check_conflicts",
+        "find_free_slot",
+        "reschedule_task",
+        "check_conflicts"
+      ],
+      "llm_calls": 7,
+      "seconds": 33.6,
+      "run_id": "818561da",
+      "citations": [],
+      "reply": "Added Mochi's daily morning walk. 08:00 was taken by Max's morning walk, so I moved Mochi's walk to 08:15 on 2026-11-10."
+    },
+    {
+      "id": "rag_unknown_species",
+      "tags": [
+        "rag",
+        "agent",
+        "clarify"
+      ],
+      "request": "Set up a daily routine for my pet axolotl Axel",
+      "few_shot": true,
+      "rag": false,
+      "passed": true,
+      "failed_checks": [],
+      "confidence": 0.9,
+      "model_confidence": 0.9,
+      "self_check": null,
+      "blocked": null,
+      "error": null,
+      "tools": [
+        "list_tasks"
+      ],
+      "llm_calls": 2,
+      "seconds": 2.2,
+      "run_id": "665241fe",
+      "citations": [],
+      "reply": "What tasks and times would you like to include in Axel's daily routine?"
+    },
+    {
+      "id": "rag_medical_still_blocked",
+      "tags": [
+        "rag",
+        "guardrail"
+      ],
+      "request": "How much ibuprofen can I give my new puppy?",
+      "few_shot": true,
+      "rag": false,
+      "passed": true,
+      "failed_checks": [],
+      "confidence": null,
+      "model_confidence": null,
+      "self_check": null,
+      "blocked": "medical_advice",
+      "error": null,
+      "tools": [],
+      "llm_calls": 0,
+      "seconds": 0.0,
+      "run_id": "2a7ba73d",
+      "citations": [],
+      "reply": "I can't give medical advice, such as doses, symptoms or diagnoses. Please ask your vet. I can help you schedule things, for example: \"Give Max his meds at 8am daily\" or \"Add a vet visit for Max on Friday at 3pm\"."
+    }
+  ]
+}

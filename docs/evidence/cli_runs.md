@@ -5,8 +5,8 @@ and its output is pasted unedited. Re-run the script to reproduce it.
 
 | Field | Value |
 |---|---|
-| Generated | 2026-11-07 23:15 EST |
-| Git commit | `d36d464` |
+| Generated | 2026-11-12 23:12 EST |
+| Git commit | `dc5e83d (with uncommitted changes)` |
 | Gemini model | `gemini-3.5-flash-lite` |
 | Mode | full (live Gemini + guardrail cases) |
 | Fixed date | `--today 2026-11-10` (the agent treats this as today) |
@@ -19,15 +19,18 @@ should match on every run. Gemini's exact wording, timing and confidence can var
 
 | # | Case | Calls Gemini | Exit | Self-check | run_id |
 |---|---|---|---|---|---|
-| 1 | Add a task that clashes (agent repairs it) | yes | `0` | passed | `7625ef0c` · [trace](../traces/trace_7625ef0c.md) |
-| 2 | Read-only question | yes | `0` | n/a (nothing changed) | `46b6feab` |
-| 3 | Reschedule an existing task | yes | `0` | passed | `cae63cab` · [trace](../traces/trace_cae63cab.md) |
-| 4 | Missing information | yes | `0` | n/a (nothing changed) | `a3086c50` |
-| 5 | Delete needs confirmation (owner cancels) | yes | `0` | n/a (nothing changed) | `407ee05a` · [trace](../traces/trace_407ee05a.md) |
-| 6 | Medication scheduling is allowed | yes | `0` | passed | `0f3a5c6e` |
-| 7 | Medical advice is refused | no | `0` | blocked by input guardrail | `405301e2` |
-| 8 | Emergency | no | `0` | blocked by input guardrail | `908e8925` |
-| 9 | Prompt injection | no | `0` | blocked by input guardrail | `540f43c9` |
+| 1 | Add a task that clashes (agent repairs it) | yes | `0` | passed | `c3601c6a` · [trace](../traces/trace_add-a-task-that-clashes-agent-repairs-it.md) |
+| 2 | Read-only question | yes | `0` | n/a (nothing changed) | `7adbcdfa` |
+| 3 | Reschedule an existing task | yes | `0` | passed | `a5a42cd8` · [trace](../traces/trace_reschedule-an-existing-task.md) |
+| 4 | Missing information | yes | `0` | n/a (nothing changed) | `b4bc4c18` |
+| 5 | Delete needs confirmation (owner cancels) | yes | `0` | n/a (nothing changed) | `c946f2e2` · [trace](../traces/trace_delete-needs-confirmation-owner-cancels.md) |
+| 6 | New puppy routine (retrieval on) | yes | `0` | passed | `f9aff827` · [trace](../traces/trace_new-puppy-routine-retrieval-on.md) |
+| 7 | New puppy routine (retrieval off) | yes | `0` | n/a (nothing changed) | `5c12522c` · [trace](../traces/trace_new-puppy-routine-retrieval-off.md) |
+| 8 | Copy a routine from another pet (history search) | yes | `0` | passed | `4ceec40b` |
+| 9 | Medication scheduling is allowed | yes | `0` | passed | `fda7e378` |
+| 10 | Medical advice is refused | no | `0` | blocked by input guardrail | `beb918be` |
+| 11 | Emergency | no | `0` | blocked by input guardrail | `9b58091c` |
+| 12 | Prompt injection | no | `0` | blocked by input guardrail | `8039694e` |
 
 Full step-by-step logs for every run are in `logs/agent.jsonl` (git-ignored); selected runs are exported to [`docs/traces/`](../traces/).
 
@@ -45,23 +48,22 @@ You: Feed Mochi at 8am tomorrow
 PawPal+: Added Mochi's feeding on 2026-11-11. 08:00 was taken by Max's morning walk, so I moved it to 08:15.
 
 Actions taken:
-  - Added Mochi's 'Feed' at 08:00 on 2026-11-11
-  - Moved Mochi's 'Feed' from 08:00 on 2026-11-11 to 08:15 on 2026-11-11
+  - Added Mochi's 'Feeding' at 08:00 on 2026-11-11
+  - Moved Mochi's 'Feeding' from 08:00 on 2026-11-11 to 08:15 on 2026-11-11
 
 Steps:
-  1. add_task({"due_date": "2026-11-11", "pet_name": "Mochi", "description": "Feed", "time": "08:00"}) -> ok
+  1. add_task({"due_date": "2026-11-11", "time": "08:00", "pet_name": "Mochi", "description": "Feeding"}) -> ok
   2. check_conflicts({}) -> ok
-  3. find_free_slot({"date": "2026-11-11", "after": "08:00"}) -> ok
-  4. reschedule_task({"time": "08:15", "ref": "Mochi:2", "due_date": "2026-11-11"}) -> ok
-  5. check_conflicts({}) -> ok
+  3. reschedule_task({"ref": "Mochi:2", "due_date": "2026-11-11", "time": "08:15"}) -> ok
+  4. check_conflicts({}) -> ok
 
 Self-check: passed
-  OK   Mochi:2: 'Feed' at 08:15 on 2026-11-11 is saved.
+  OK   Mochi:2: 'Feeding' at 08:15 on 2026-11-11 is saved.
   OK   no clashes at the times the agent changed.
-Confidence: 0.95 (added Mochi's feed, resolved clash by moving to 08:15, conflict check clean)
+Confidence: 0.95 (task added, clash resolved, re-check clean)
 
-run_id: 7625ef0c  (details in logs/agent.jsonl)
-Trace written to docs/traces/trace_7625ef0c.md
+run_id: c3601c6a  (details in logs/agent.jsonl)
+Trace written to docs/traces/trace_c3601c6a.md
 ```
 
 Exit code: `0`
@@ -77,10 +79,9 @@ python -m pawpal_cli --data demo.json --reset-demo --today 2026-11-10 "What's on
 ```text
 You: What's on today for my pets?
 
-PawPal+: Today you have:
+PawPal+: Here is today's schedule for your pets:
 - Mochi: Breakfast at 07:30
-- Max: Morning walk at 08:00
-- Max: Evening meds at 20:00
+- Max: Morning walk at 08:00, Evening meds at 20:00
 
 Steps:
   1. get_todays_schedule({}) -> ok
@@ -89,7 +90,7 @@ Self-check: n/a (nothing changed)
   No tasks were changed, so there was nothing to verify.
 Confidence: 1.00 (fetched today's schedule successfully)
 
-run_id: 46b6feab  (details in logs/agent.jsonl)
+run_id: 7adbcdfa  (details in logs/agent.jsonl)
 ```
 
 Exit code: `0`
@@ -111,8 +112,8 @@ Actions taken:
   - Moved Mochi's 'Grooming' from 10:00 on 2026-11-11 to 11:00 on 2026-11-11
 
 Steps:
-  1. list_tasks({"pet_name": "Mochi"}) -> ok
-  2. reschedule_task({"ref": "Mochi:1", "time": "11:00", "due_date": "2026-11-11"}) -> ok
+  1. list_tasks({"completed": false, "pet_name": "Mochi"}) -> ok
+  2. reschedule_task({"time": "11:00", "due_date": "2026-11-11", "ref": "Mochi:1"}) -> ok
   3. check_conflicts({}) -> ok
 
 Self-check: passed
@@ -120,8 +121,8 @@ Self-check: passed
   OK   no clashes at the times the agent changed.
 Confidence: 0.95 (task rescheduled and conflict check is clean)
 
-run_id: cae63cab  (details in logs/agent.jsonl)
-Trace written to docs/traces/trace_cae63cab.md
+run_id: a5a42cd8  (details in logs/agent.jsonl)
+Trace written to docs/traces/trace_a5a42cd8.md
 ```
 
 Exit code: `0`
@@ -143,7 +144,7 @@ Self-check: n/a (nothing changed)
   No tasks were changed, so there was nothing to verify.
 Confidence: 0.80 (need the day and time before adding anything)
 
-run_id: a3086c50  (details in logs/agent.jsonl)
+run_id: b4bc4c18  (details in logs/agent.jsonl)
 ```
 
 Exit code: `0`
@@ -172,14 +173,142 @@ Self-check: n/a (nothing changed)
   No tasks were changed, so there was nothing to verify.
 Confidence: 0.90 (correct task found; deletion waits for the user)
 
-run_id: 407ee05a  (details in logs/agent.jsonl)
+run_id: c946f2e2  (details in logs/agent.jsonl)
 Cancelled: Remove Mochi's 'Grooming' at 10:00 on 2026-11-11 (nothing was deleted)
-Trace written to docs/traces/trace_407ee05a.md
+Trace written to docs/traces/trace_c946f2e2.md
 ```
 
 Exit code: `0`
 
-## 6. Medication scheduling is allowed
+## 6. New puppy routine (retrieval on)
+
+**Shows:** RAG: the agent calls lookup_care_guidelines first, then creates the tasks (3 meals, 4 walks, 2 play sessions) at the times in knowledge/dog-puppy.md, and the reply cites its sources.
+
+```bash
+python -m pawpal_cli --data demo.json --reset-demo --today 2026-11-10 --start "puppy" --export-trace "Set up a daily routine for my new puppy Biscuit"
+```
+
+```text
+You: Set up a daily routine for my new puppy Biscuit
+
+PawPal+: Set up Biscuit's daily puppy routine with 3 meals, 4 walks/potty breaks, and 2 play sessions. No conflicts found.
+
+[dog-puppy.md: Feeding] [dog-puppy.md: Walks and potty breaks] [dog-puppy.md: Play and training]
+
+Actions taken:
+  - Added Biscuit's 'Breakfast' at 07:30 on 2026-11-10
+  - Added Biscuit's 'Morning walk' at 08:00 on 2026-11-10
+  - Added Biscuit's 'Play and training' at 10:30 on 2026-11-10
+  - Added Biscuit's 'Lunch' at 12:30 on 2026-11-10
+  - Added Biscuit's 'Midday walk' at 13:00 on 2026-11-10
+  - Added Biscuit's 'Afternoon play' at 15:30 on 2026-11-10
+  - Added Biscuit's 'Dinner' at 17:30 on 2026-11-10
+  - Added Biscuit's 'Evening walk' at 18:00 on 2026-11-10
+  - Added Biscuit's 'Potty break' at 21:30 on 2026-11-10
+
+Sources retrieved:
+  - [dog-puppy.md: Play and training]
+  - [dog-puppy.md: Feeding]
+  - [dog-puppy.md: Walks and potty breaks]
+  - [general-routine.md: Priorities]
+  - [general-routine.md: Spacing tasks]
+  - [general-routine.md: New pets]
+
+Steps:
+  1. lookup_care_guidelines({"species": "dog", "query": "puppy daily routine feeding walks play grooming", "life_stage": "puppy"}) -> ok
+  2. add_task({"pet_name": "Biscuit", "description": "Breakfast", "time": "07:30", "frequency": "daily", "priority": "medium", "due_date": "today"}) -> ok
+  3. add_task({"priority": "medium", "time": "08:00", "due_date": "today", "description": "Morning walk", "frequency": "daily", "pet_name": "Biscuit"}) -> ok
+  4. add_task({"time": "10:30", "pet_name": "Biscuit", "due_date": "today", "frequency": "daily", "description": "Play and training", "priority": "medium"}) -> ok
+  5. add_task({"time": "12:30", "frequency": "daily", "description": "Lunch", "pet_name": "Biscuit", "due_date": "today", "priority": "medium"}) -> ok
+  6. add_task({"description": "Midday walk", "frequency": "daily", "due_date": "today", "priority": "medium", "time": "13:00", "pet_name": "Biscuit"}) -> ok
+  7. add_task({"frequency": "daily", "due_date": "today", "priority": "medium", "time": "15:30", "description": "Afternoon play", "pet_name": "Biscuit"}) -> ok
+  8. add_task({"description": "Dinner", "frequency": "daily", "priority": "medium", "due_date": "today", "time": "17:30", "pet_name": "Biscuit"}) -> ok
+  9. add_task({"description": "Evening walk", "priority": "medium", "frequency": "daily", "due_date": "today", "time": "18:00", "pet_name": "Biscuit"}) -> ok
+  10. add_task({"description": "Potty break", "time": "21:30", "priority": "medium", "due_date": "today", "pet_name": "Biscuit", "frequency": "daily"}) -> ok
+  11. check_conflicts({}) -> ok
+
+Self-check: passed
+  OK   Biscuit:0: 'Breakfast' at 07:30 on 2026-11-10 is saved.
+  OK   Biscuit:1: 'Morning walk' at 08:00 on 2026-11-10 is saved.
+  OK   Biscuit:2: 'Play and training' at 10:30 on 2026-11-10 is saved.
+  OK   Biscuit:3: 'Lunch' at 12:30 on 2026-11-10 is saved.
+  OK   Biscuit:4: 'Midday walk' at 13:00 on 2026-11-10 is saved.
+  OK   Biscuit:5: 'Afternoon play' at 15:30 on 2026-11-10 is saved.
+  OK   Biscuit:6: 'Dinner' at 17:30 on 2026-11-10 is saved.
+  OK   Biscuit:7: 'Evening walk' at 18:00 on 2026-11-10 is saved.
+  OK   Biscuit:8: 'Potty break' at 21:30 on 2026-11-10 is saved.
+  OK   no clashes at the times the agent changed.
+Confidence: 0.98 (all puppy routine tasks added successfully and conflict check is clean)
+
+run_id: f9aff827  (details in logs/agent.jsonl)
+Trace written to docs/traces/trace_f9aff827.md
+```
+
+Exit code: `0`
+
+## 7. New puppy routine (retrieval off)
+
+**Shows:** The same request with --no-rag: no lookup tools, so the agent can only ask what to schedule. Compare with the case above.
+
+```bash
+python -m pawpal_cli --data demo.json --reset-demo --today 2026-11-10 --start "puppy" --no-rag --export-trace "Set up a daily routine for my new puppy Biscuit"
+```
+
+```text
+You: Set up a daily routine for my new puppy Biscuit
+
+PawPal+: What tasks and times would you like to include in Biscuit's daily routine?
+
+Self-check: n/a (nothing changed)
+  No tasks were changed, so there was nothing to verify.
+Confidence: 0.90 (need details for the daily routine tasks and times)
+
+run_id: 5c12522c  (details in logs/agent.jsonl)
+Trace written to docs/traces/trace_5c12522c.md
+```
+
+Exit code: `0`
+
+## 8. Copy a routine from another pet (history search)
+
+**Shows:** RAG source 2: the agent searches the owner's own tasks (find_similar_tasks), copies Max's walk to Mochi and repairs the clash at 08:00.
+
+```bash
+python -m pawpal_cli --data demo.json --reset-demo --today 2026-11-10 "Give Mochi the same walk routine as Max"
+```
+
+```text
+You: Give Mochi the same walk routine as Max
+
+PawPal+: Added Mochi's daily morning walk. Since 08:00 on 2026-11-10 was taken by Max's walk [history: Max:0], I moved Mochi's walk to 08:15.
+
+Actions taken:
+  - Added Mochi's 'Morning walk' at 08:00 on 2026-11-10
+  - Moved Mochi's 'Morning walk' from 08:00 on 2026-11-10 to 08:15 on 2026-11-10
+
+Sources retrieved:
+  - [history: Max:0]
+  - [history: Max:2]
+
+Steps:
+  1. find_similar_tasks({"pet_name": "Max", "query": "walk"}) -> ok
+  2. add_task({"pet_name": "Mochi", "description": "Morning walk", "time": "08:00", "priority": "high", "due_date": "2026-11-10", "frequency": "daily"}) -> ok
+  3. check_conflicts({}) -> ok
+  4. find_free_slot({"date": "2026-11-10", "after": "08:00"}) -> ok
+  5. reschedule_task({"due_date": "2026-11-10", "time": "08:15", "ref": "Mochi:2"}) -> ok
+  6. check_conflicts({}) -> ok
+
+Self-check: passed
+  OK   Mochi:2: 'Morning walk' at 08:15 on 2026-11-10 is saved.
+  OK   no clashes at the times the agent changed.
+Confidence: 0.95 (added Mochi's walk, resolved conflict by rescheduling to the next free slot, and re-checked cleanly)
+
+run_id: 4ceec40b  (details in logs/agent.jsonl)
+```
+
+Exit code: `0`
+
+## 9. Medication scheduling is allowed
 
 **Shows:** The medical guardrail allows scheduling meds; only medical advice is blocked.
 
@@ -190,26 +319,26 @@ python -m pawpal_cli --data demo.json --reset-demo --today 2026-11-10 "Give Max 
 ```text
 You: Give Max his heartworm pill at 9am tomorrow
 
-PawPal+: Added Max's heartworm pill at 09:00 tomorrow (2026-11-11). No clashes.
+PawPal+: Added Max's heartworm pill at 09:00 on 2026-11-11. No clashes.
 
 Actions taken:
   - Added Max's 'Heartworm pill' at 09:00 on 2026-11-11
 
 Steps:
-  1. add_task({"due_date": "2026-11-11", "time": "09:00", "pet_name": "Max", "description": "Heartworm pill"}) -> ok
+  1. add_task({"due_date": "2026-11-11", "time": "09:00", "description": "Heartworm pill", "pet_name": "Max"}) -> ok
   2. check_conflicts({}) -> ok
 
 Self-check: passed
   OK   Max:3: 'Heartworm pill' at 09:00 on 2026-11-11 is saved.
   OK   no clashes at the times the agent changed.
-Confidence: 0.95 (task added and conflict check clean)
+Confidence: 0.95 (task added and conflict check is clean)
 
-run_id: 0f3a5c6e  (details in logs/agent.jsonl)
+run_id: fda7e378  (details in logs/agent.jsonl)
 ```
 
 Exit code: `0`
 
-## 7. Medical advice is refused
+## 10. Medical advice is refused
 
 **Shows:** Input guardrail: dosage questions get a 'contact your vet' reply. Gemini is never called.
 
@@ -224,12 +353,12 @@ PawPal+: I can't give medical advice, such as doses, symptoms or diagnoses. Plea
 
 [guardrail] request blocked (medical_advice); Gemini was not called.
 
-run_id: 405301e2  (details in logs/agent.jsonl)
+run_id: beb918be  (details in logs/agent.jsonl)
 ```
 
 Exit code: `0`
 
-## 8. Emergency
+## 11. Emergency
 
 **Shows:** Input guardrail: emergencies get an emergency-vet message right away. Gemini is never called.
 
@@ -244,12 +373,12 @@ PawPal+: This sounds like it could be an emergency. Please contact your vet or t
 
 [guardrail] request blocked (emergency); Gemini was not called.
 
-run_id: 908e8925  (details in logs/agent.jsonl)
+run_id: 9b58091c  (details in logs/agent.jsonl)
 ```
 
 Exit code: `0`
 
-## 9. Prompt injection
+## 12. Prompt injection
 
 **Shows:** Input guardrail: attempts to override the instructions are refused. Gemini is never called.
 
@@ -264,7 +393,7 @@ PawPal+: I can't change my instructions. I can help you manage your pets' care s
 
 [guardrail] request blocked (prompt_injection); Gemini was not called.
 
-run_id: 540f43c9  (details in logs/agent.jsonl)
+run_id: 8039694e  (details in logs/agent.jsonl)
 ```
 
 Exit code: `0`
