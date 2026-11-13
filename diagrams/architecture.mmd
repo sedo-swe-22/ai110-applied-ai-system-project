@@ -1,7 +1,7 @@
-%% PawPal+ AI Agent: system architecture (matches the code as of 2026-11-08)
-%% Solid = built. Dashed = planned, not built yet (eval harness, RAG phase 2).
+%% PawPal+ AI Agent: system architecture (matches the code as of 2026-11-12)
+%% Everything shown is built. Retrieval (RAG) = Retriever + the two sources it searches.
 %% Keep this in sync with the code; the README embeds a copy of this diagram.
-flowchart TB
+flowchart LR
     subgraph IN["1 · Input"]
         User(["👤 Pet owner"])
         UI["Streamlit chat · app.py<br/>or CLI · pawpal_cli.py<br/>(same agent, same data)"]
@@ -9,17 +9,22 @@ flowchart TB
 
     subgraph PROC["2 · Process"]
         InGuard{"Input guardrails · guardrails.py<br/>length · prompt injection · emergency<br/>medical advice · off-topic"}
-        Agent["Agent loop · agent.py<br/>plan → call tools → check → repair<br/>max 10 tool calls"]
+        Agent["Agent loop · agent.py<br/>plan → call tools → check → repair<br/>max 16 tool calls"]
         LLM["LLM client · llm_client.py<br/>retry + backoff · 60s timeout<br/>stop on daily quota"]
         Gemini[["Gemini API<br/>gemini-3.5-flash-lite · free tier"]]
         ToolGuard{"Tool guardrails · guardrails.py<br/>allowlist · dates within 365 days"}
-        Tools["Tools · agent_tools.py<br/>9 tools · task refs like Max:2<br/>errors returned, never raised"]
+        Tools["Tools · agent_tools.py<br/>11 tools (2 are retrieval) · task refs like Max:2<br/>errors returned, never raised"]
         Core["PawPal+ core · pawpal_system.py<br/>Owner · Pet · Task · Scheduler<br/>Task validation"]
-        RAG["Retriever + pet-care docs<br/>(RAG phase 2, planned)"]
+        Retriever["Retriever · retrieval.py<br/>BM25 keyword search · section chunks<br/>every hit has a citation"]
+    end
+
+    subgraph SRC["Retrieval sources"]
+        Know[("knowledge/*.md<br/>9 pet-care scheduling guides<br/>filter by species + life stage")]
+        Hist[("Owner's own tasks<br/>rebuilt live on every lookup")]
     end
 
     subgraph OUT["3 · Output"]
-        Check{"Self-check · agent.py<br/>change exists? clash-free?<br/>+ model confidence → score<br/>Output check · guardrails.py"}
+        Check{"Self-check · agent.py<br/>change exists? clash-free?<br/>+ model confidence → score<br/>Output check · guardrails.py<br/>cited sources must have been retrieved"}
         Reply["Reply + actions taken<br/>+ step trace + confidence"]
         Data[("data.json<br/>saved on success ·<br/>rolled back on failure")]
         Logs[("logs/agent.jsonl<br/>logging_config.py")]
@@ -28,9 +33,9 @@ flowchart TB
     subgraph CHECK["Human & testing checkpoints"]
         Confirm{"🧑 Owner confirms<br/>deletions"}
         Tests["pytest · fake LLM<br/>no API key needed"]
-        Evidence["scripts/record_evidence.sh<br/>→ docs/evidence/ · docs/traces/"]
-        Evals["evals/run_evals.py<br/>(planned)"]
-        Dev(["🧑‍💻 Developer reviews<br/>evidence, traces + logs"])
+        Evidence["scripts/record_evidence.sh<br/>real CLI runs from logs/<br/>→ docs/evidence/ · docs/traces/"]
+        Evals["Eval harness · evals/run_evals.py<br/>30 cases · final state checked in code<br/>few-shot on/off · RAG on/off"]
+        Dev(["🧑‍💻 Developer reviews<br/>eval results, evidence, traces"])
     end
 
     User --> UI --> InGuard
@@ -43,7 +48,11 @@ flowchart TB
     Tools -.->|"result or error"| Agent
     ToolGuard -.->|"rejected → error to model"| Agent
     Tools --> Core
-    Tools -.-> RAG
+    Tools -->|"lookup_care_guidelines"| Retriever
+    Tools -->|"find_similar_tasks"| Retriever
+    Retriever --> Know
+    Retriever --> Hist
+    Retriever -.->|"cited passages"| Tools
     Core --> Data
     Agent --> Check --> Reply
     Reply --> UI
@@ -51,18 +60,13 @@ flowchart TB
 
     Tools -->|"remove_task →<br/>pending action"| Confirm
     Confirm -->|"confirm: app/CLI deletes"| Core
-    Tests -.->|"verify"| Agent
-    Evidence -->|"real CLI runs"| Agent
-    Evals -.->|"run cases"| Agent
-    Logs --> Evidence
-    Evidence --> Dev
+    Tests & Evals & Evidence -.->|"exercise the agent"| Agent
+    Evals & Evidence -->|"results · evidence · traces"| Dev
     Dev -->|"fix prompts · tools · guardrails"| Agent
 
     classDef human fill:#fff4d6,stroke:#c99a00,color:#000
     classDef guard fill:#ffe3e3,stroke:#c0392b,color:#000
     classDef store fill:#e8f0fe,stroke:#3367d6,color:#000
-    classDef future fill:#f4f4f4,stroke:#999,stroke-dasharray:5 5,color:#555
     class User,Confirm,Dev human
     class InGuard,ToolGuard,Check guard
-    class Data,Logs store
-    class RAG,Evals future
+    class Data,Logs,Know,Hist store

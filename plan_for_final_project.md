@@ -38,7 +38,7 @@ The final project asks for an upgrade to an earlier project that adds RAG, an ag
 | Sun Nov 8 | 3 · Guardrails | Guardrail tests pass (medical advice vs scheduling, cap, pending action, output check) |
 | Mon Nov 9 | 4 · Streamlit chat + CLI | End-to-end request works in both |
 | Tue Nov 10 – Wed Nov 11 | 5 · Evals + few-shot comparison + human eval | `evals/results.md` has at least one before/after run; the human-eval table is filled |
-| **Wed Nov 11 (evening)** | **RAG go/no-go** | Go only if steps 1–5 are done and stable |
+| **Wed Nov 11 (evening)** | **RAG go/no-go** | Go only if steps 1–5 are done and stable. **Decision: GO, made Thu Nov 12** (steps 1–5 were done and stable; BM25, two sources) |
 | Thu Nov 12 – Fri Nov 13 | 7 · RAG phase 2 (**if go**); otherwise polish + extra eval runs | RAG before/after recorded, or skipped deliberately |
 | Sat Nov 14 | 6 · Docs | README, `model_card.md`, final diagram, `docs/traces/`, reflection |
 | Sun Nov 15 | 8 · Presentation and portfolio + final checks | Fresh-clone test passes; slides done; **every Submission Checklist item ticked**; **submitted by 9 PM EST** |
@@ -68,8 +68,8 @@ From the course page: once all required features are done, use this checklist to
 | 2 | Repo is public | ✅ | GitHub API: `private: false`, `visibility: public` |
 | 3a | Runnable code | ✅ | Fresh clone + new venv: install works and all tests pass with **no `.env`**. Bug found and fixed Nov 8: without a key, even guardrail-blocked requests failed. Now guardrails work without a key, and requests that need Gemini fail cleanly (exit 1, nothing saved). `scripts/record_evidence.sh --offline` verified on a key-less clone |
 | 3b | Comprehensive README.md | ✅ draft (Nov 8, local) | Rewritten for the final project: base project, new features, architecture (embedded Mermaid), setup, run, 3 real example runs, guardrails table, testing summary, limitations, structure. **Student review / own-voice edit still to do.** Update again when evals/RAG land |
-| 3c | model_card.md | ✅ draft (Nov 8, local) | Sections 1–8 drafted from real runs and tests; the 4 reflection questions are headers word for word (6.1–6.4). New evidence: `docs/evidence/guardrail_probe.md` (6/12) + 3 traces in `docs/traces/guardrail_misses/`. Sections 9 (few-shot) and 10 (RAG) pending |
-| 3d | Mermaid diagram in `diagrams/` | ✅ (Nov 8) | `diagrams/architecture.mmd` now matches the code: every file it names exists, and its numbers (9 tools, 10-call cap, 365-day window, 60s timeout, model) were checked against the code. Evals and RAG are dashed as planned. **Update again when evals/RAG are built** |
+| 3c | model_card.md | ✅ draft (updated Nov 12) | Sections 1–9 from real runs and tests, including section 9 (few-shot on vs. off from two eval runs) and the eval table in section 5. The 4 reflection questions are headers word for word (6.1–6.4). Section 10 (RAG on vs. off, from a real run) written; regression-run line to confirm |
+| 3d | Mermaid diagram in `diagrams/` | ✅ (updated Nov 12) | Matches the code: the eval harness is now a solid box (24 cases, final state checked, few-shot on vs. off); RAG is now solid too (retriever, two sources, 30 cases, RAG on/off). The README embeds an identical copy |
 | 4 | Reproducible execution evidence | ✅ first run (Nov 7) | `scripts/record_evidence.sh` → `docs/evidence/cli_runs.md` (9 cases, all exit 0, header at clean commit `d36d464`), `docs/evidence/test_results.txt`, 3 traces in `docs/traces/`. **Re-run on docs day** so it matches the final code |
 | 4b | Images only in `/assets` or `/diagrams` | ✅ | Only `diagrams/uml_final.png` (Module 2). `assets/` is empty, so git doesn't store it; it appears once screenshots are added |
 | 5 | Multiple meaningful commits | ✅ | 17 commits, mostly small and focused, with code and tests together |
@@ -79,7 +79,7 @@ From the course page: once all required features are done, use this checklist to
 | 7b | Loom walkthrough (optional) | — | Optional; add the link to the README if recorded |
 | 8 | Final changes pushed before the deadline | ⏳ | Target Sun Nov 15, 9 PM EST |
 
-**Remaining work, by date:** step 5 (evals) → update the diagram (3d) → docs day Nov 14: README (3b, 6a, 7), `model_card.md` (3c, 6b), re-run the evidence script (4) → final push (8).
+**Remaining work, by date (updated Nov 12):** evals ✅ (2 runs recorded) → RAG ✅ built Nov 12 (GO) → the `app.py` tabs change → student writing: `model_card.md` 6.3/6.4, `reflection.md`, `ai_interactions.md` (trace links added Nov 12; your own prompts/notes still to add), human-eval table → docs day Nov 14: re-run the evidence script → final push (8).
 
 **New items this checklist adds to the plan**
 - **Biases section in `model_card.md`.** Not planned before. Ideas to cover:
@@ -363,14 +363,14 @@ The AI assistant (Claude Code) does the following. The student owns the design d
 - The tests caught a bug: the confidence parser missed Gemini's markdown bold (`**CONFIDENCE:** 0.9`). Fixed.
 
 **Still to build**
-- [ ] Room for RAG, part done: tool registry ✅ and prompt sections ✅; eval tags and the `Retriever` interface still to do
-- [ ] Phase 2: `knowledge/` docs, a retriever implementation and the `lookup_care_guidelines` tool
+- [x] Room for RAG: tool registry, prompt sections, eval tags and the `Retriever` interface (in `retrieval.py`)
+- [x] Phase 2 (built Nov 12): 9 `knowledge/` docs, BM25 retriever with two sources (guidelines + the owner's task history), tools `lookup_care_guidelines` and `find_similar_tasks`, retrieval prompt section (`PAWPAL_RAG`, `--no-rag`), citation output check, 6 `rag` eval cases and `--compare-rag`. Real run: RAG on 6/6 vs. off 3/6 (see `model_card.md` section 10). Found by a live run: a full puppy routine needs 11 tool calls, so the cap went from 10 to 16
 - [x] Self-check / confidence step (in `agent.py`)
-- [ ] Confidence recorded by the eval harness
+- [x] Confidence recorded by the eval harness (per case, plus confidence on passed vs. failed cases)
 
 **Testing and evaluation**
 - [x] Unit tests for tools and guardrails, plus loop and CLI tests with a fake client (no API key): `tests/test_agent_tools.py`, `test_guardrails.py`, `test_agent_loop.py`, `test_cli.py`
-- [ ] `evals/cases.yaml` (draft cases for the student to review) and `evals/run_evals.py` with a pass/fail summary
+- [x] `evals/cases.yaml` (24 cases: 18 drafted + 6 hard cases chosen with the student) and `evals/run_evals.py` with a pass/fail summary, `--compare-few-shot`, `--resume`, and good/bad-agent tests of every hard case's pass rule
 - [x] Keep the existing 63 PawPal tests passing after every change (ongoing; true so far)
 
 **Reproducibility**
@@ -403,17 +403,17 @@ The AI assistant (Claude Code) does the following. The student owns the design d
 - [x] Plan-review decisions: add a CLI, tool-layer task refs, refuse medical advice but allow scheduling, few-shot specialization
 - [x] Set the timeline: due Mon Nov 16, 2:59 AM EST; RAG go/no-go Wed Nov 11
 - [x] Get the Gemini API key (in local `.env` as `GEMINI_API_KEY`, git-ignored; done Nov 4)
-- [ ] Make the RAG go/no-go call on **Wed Nov 11**
+- [x] Make the RAG go/no-go call: **GO** (Nov 12)
 - [ ] Approve or change each step's design before it is built
 
 **Accounts and running things**
 - [x] Get a Gemini API key from Google AI Studio and put it in a local `.env` as `GEMINI_API_KEY`. Never share it in chat or commit it.
-- [ ] Run the real-model evals and the Streamlit app, and check that the behavior makes sense
+- [x] Run the real-model evals (run 1 by the student, Nov 11: 18/18 both modes; run 2 at the student's request, Nov 11: 24/24 vs. 23/24) — Streamlit check still to do
 - [ ] Do the "someone else can run it" test: follow the README on a fresh clone exactly as written
 
 **Review**
 - [ ] Read and understand every file the AI writes, well enough to explain it in the presentation
-- [ ] Review the draft eval cases and add a few of your own, especially tricky ones that might break it
+- [x] Review the draft eval cases and add tricky ones: chose 6 hard cases and decided two pass rules (ambiguous request → ask; mixed safe/unsafe → refuse with a clear message)
 - [ ] Human evaluation: review about 8 real agent replies against written criteria and fill in the markdown table (Input / Criteria / Result / Notes)
 - [ ] Edit the AI's doc drafts into your own voice
 
@@ -435,6 +435,9 @@ The AI assistant (Claude Code) does the following. The student owns the design d
 - Rejected or revised: the AI offered to commit the plan file together with `pytest.ini`; the student chose to commit `pytest.ini` alone.
 - Accepted: chose PawPal+ over Music Recommender and Game Glitch, as the AI recommended.
 - Accepted: used `git archive` to import the PawPal+ baseline, which left out caches and local data.
+- Accepted: switching to `gemini-3.5-flash-lite` after the 20/day quota was confirmed (the student first noticed the rate limit in Streamlit and asked for a lighter model).
+- Revised: for eval case H5 (mixed safe/unsafe request), the AI's pass rule only checked "blocked"; the student required a proper refusal message, which led to `MEDICAL_MIXED_REPLY` (it now says nothing was changed).
+- Decided: for the ambiguous "Move Max's walk to 9am", asking is the right behavior. The eval later showed few-shot off guessed instead.
 
 ## Project Goals (reference)
 From the project requirements page. By completing this project, you will be able to:
@@ -522,7 +525,7 @@ From the project requirements page. By completing this project, you will be able
 - ~~**Medical guardrail:**~~ **Decided:** refuse advice, allow scheduling (§3).
 - ~~**Specialization bonus:**~~ **Decided:** yes, a few-shot prompt section (§2, §6).
 - ~~**Task identity:**~~ **Decided:** tool-layer refs (§1).
-- ~~**RAG go/no-go:**~~ **Decided:** Wed Nov 11 (evening). Go only if steps 1–5 are done and stable.
+- ~~**RAG go/no-go:**~~ **Decided:** GO on Thu Nov 12. Retriever: BM25 in pure Python (no embeddings, no extra quota). Sources: guidelines in `knowledge/` plus the owner's own tasks (multi-source).
 - ~~**Timeline:**~~ **Decided:** due Mon Nov 16, 2:59 AM EST; target submission Sun Nov 15, 9 PM EST (see Timeline).
 
 All open questions are resolved.

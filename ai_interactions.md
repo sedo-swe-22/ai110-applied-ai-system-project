@@ -1,5 +1,24 @@
 # AI Interactions Log
 
+## Final project: agent reasoning traces (committed)
+
+These are real runs of the PawPal+ agent (Gemini), exported by `logging_config.export_trace` from `logs/agent.jsonl`. Each trace shows the decision chain in order (model decision, tool call, result, self-check, final reply), with the raw log lines at the bottom. They are committed so the reasoning is on record, not only printed in a terminal.
+
+| Trace | Request | What it shows |
+|---|---|---|
+| [`trace_new-puppy-routine-retrieval-on.md`](docs/traces/trace_new-puppy-routine-retrieval-on.md) | Set up a daily routine for my new puppy Biscuit (**retrieval on**) | `lookup_care_guidelines` first, then 9 `add_task` calls whose times and counts come from the retrieved `dog-puppy.md` sections, `check_conflicts`, and a reply that cites its sources |
+| [`trace_new-puppy-routine-retrieval-off.md`](docs/traces/trace_new-puppy-routine-retrieval-off.md) | The same request (**retrieval off**, `--no-rag`) | The agent only calls `list_tasks` and asks what to schedule; nothing changes. The contrast with the trace above is the RAG before/after |
+| [`trace_add-a-task-that-clashes-agent-repairs-it.md`](docs/traces/trace_add-a-task-that-clashes-agent-repairs-it.md) | Feed Mochi at 8am tomorrow | Clash repair: add, `check_conflicts`, `find_free_slot`, `reschedule_task`, re-check |
+| [`trace_reschedule-an-existing-task.md`](docs/traces/trace_reschedule-an-existing-task.md) | Move Mochi's grooming to 11am | Look up the task ref, reschedule, check |
+| [`trace_delete-needs-confirmation-owner-cancels.md`](docs/traces/trace_delete-needs-confirmation-owner-cancels.md) | Delete Mochi's grooming | `remove_task` only queues a pending deletion; nothing is deleted until the owner confirms |
+| [`guardrail_misses/`](docs/traces/guardrail_misses/) | Three phrasings the keyword guardrail missed (grapes, a Spanish dose question, a swallowed sock) | The second layer (the system-prompt rule) still refused and pointed to a vet |
+
+More evidence: [`docs/evidence/cli_runs.md`](docs/evidence/cli_runs.md) (recorded CLI runs), [`evals/results.md`](evals/results.md) (every eval run).
+
+*The sections below are from the Module 2 project (PawPal+ starter) and are kept as written.*
+
+---
+
 > **Stretch features only.** Only fill in the sections that apply to stretch features you attempted. If you did not attempt a stretch feature, leave its section blank or delete it. This file is not required for the core project.
 
 ---
