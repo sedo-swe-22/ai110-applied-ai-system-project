@@ -13,7 +13,9 @@
 # Every CLI run starts from the same made-up demo data (--reset-demo) and the same
 # date (--today), so anyone can re-run this and get the same tool calls and schedule.
 # Gemini's wording can differ slightly between runs; the behavior is what should match.
-# Live cases use roughly 20-30 Gemini free-tier requests in total.
+# Live cases use roughly 45-55 Gemini free-tier requests in total.
+# Exported traces get stable names (trace_<case-title>.md), so links to them from
+# ai_interactions.md keep working after a re-run.
 
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -102,9 +104,13 @@ run_case() {
     gemini="yes"
   fi
   local trace_link=""
-  local trace_file
+  local trace_file slug
   trace_file="$(printf '%s\n' "$output" | sed -n 's/^Trace written to //p' | tail -1)"
-  [ -n "$trace_file" ] && trace_link=" · [trace](../traces/$(basename "$trace_file"))"
+  if [ -n "$trace_file" ] && [ -f "$trace_file" ]; then
+    slug="$(printf '%s' "$title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\{1,\}/-/g; s/^-//; s/-$//')"
+    mv "$trace_file" "$TRACE_DIR/trace_$slug.md"
+    trace_link=" · [trace](../traces/trace_$slug.md)"
+  fi
   printf '| %s | %s | %s | `%s` | %s | %s%s |\n' "$N" "$title" "$gemini" "$code" "${check:--}" "\`${run_id:-?}\`" "$trace_link" >> "$SUMMARY"
 
   {
@@ -133,6 +139,15 @@ run_case live "Missing information" \
 run_case live "Delete needs confirmation (owner cancels)" \
   "remove_task only queues the deletion; the owner answers no (--no), so nothing is deleted." \
   --no --export-trace "Delete Mochi's grooming"
+run_case live "New puppy routine (retrieval on)" \
+  "RAG: the agent calls lookup_care_guidelines first, then creates the tasks (3 meals, 4 walks, 2 play sessions) at the times in knowledge/dog-puppy.md, and the reply cites its sources." \
+  --start puppy --export-trace "Set up a daily routine for my new puppy Biscuit"
+run_case live "New puppy routine (retrieval off)" \
+  "The same request with --no-rag: no lookup tools, so the agent can only ask what to schedule. Compare with the case above." \
+  --start puppy --no-rag --export-trace "Set up a daily routine for my new puppy Biscuit"
+run_case live "Copy a routine from another pet (history search)" \
+  "RAG source 2: the agent searches the owner's own tasks (find_similar_tasks), copies Max's walk to Mochi and repairs the clash at 08:00." \
+  "Give Mochi the same walk routine as Max"
 run_case live "Medication scheduling is allowed" \
   "The medical guardrail allows scheduling meds; only medical advice is blocked." \
   "Give Max his heartworm pill at 9am tomorrow"

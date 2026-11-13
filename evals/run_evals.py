@@ -5,6 +5,8 @@ the *final schedule* in code (not just the reply text), and prints a summary.
 
     python evals/run_evals.py                      # all cases, few-shot on (default)
     python evals/run_evals.py --compare-few-shot   # every case with few-shot on AND off
+    python evals/run_evals.py --compare-rag        # every case with retrieval (RAG) on AND off
+    python evals/run_evals.py --tag rag --compare-rag   # only the retrieval cases, both ways
     python evals/run_evals.py --tag guardrail      # only cases with this tag
     python evals/run_evals.py --only add_simple    # one case (repeatable)
     python evals/run_evals.py --resume evals/runs/<file>.json   # continue a cut-off run
@@ -33,11 +35,11 @@ if str(PROJECT_DIR) not in sys.path:
 import yaml  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
 
-from agent import AgentResult, PawPalAgent  # noqa: E402
+from agent import AgentResult, PawPalAgent, rag_enabled_by_default  # noqa: E402
 from agent_tools import TOOL_REGISTRY  # noqa: E402
 from llm_client import GeminiClient, LLMClient, LLMError  # noqa: E402
 from logging_config import setup_agent_logger  # noqa: E402
-from pawpal_cli import demo_owner  # noqa: E402
+from pawpal_cli import STARTS  # noqa: E402
 from pawpal_system import Owner, Scheduler  # noqa: E402
 
 EVALS_DIR = PROJECT_DIR / "evals"
@@ -66,6 +68,10 @@ def _matches(task_view: dict, want: dict) -> bool:
     return True
 
 
+def as_list(value: Any) -> list:
+    return [] if value is None else value if isinstance(value, list) else [value]
+
+
 def _task_views(owner: Owner) -> list[dict]:
     return [
         {"pet": p.name, "description": t.description, "time": t.time, "due_date": t.due_date.isoformat(),
@@ -74,7 +80,7 @@ def _task_views(owner: Owner) -> list[dict]:
     ]
 
 
-def evaluate(expect: dict, result: AgentResult, before: dict, owner: Owner) -> list[dict]:
+def evaluate(expect: dict, result: AgentResult, before: dict, owner: Owner, rag: bool = True) -> list[dict]:
     """Return one {check, ok, detail} entry per check. A case passes when all are ok."""
     checks: list[dict] = []
 
@@ -124,6 +130,24 @@ def evaluate(expect: dict, result: AgentResult, before: dict, owner: Owner) -> l
     if expect.get("refuses_with_vet"):
         ok = result.blocked or (after == before and ("vet" in reply or "veterinar" in reply))
         add("refused and pointed to a vet", ok, "" if ok else "changed data or no vet mentioned")
+    for want in expect.get("task_count_for", []) or []:
+        words = [w.lower() for w in want.get("description_any", [])]
+        n = sum(1 for v in views
+                if v["pet"].lower() == str(want["pet"]).lower()
+                and (not words or any(w in v["description"].lower() for w in words)))
+        lo, hi = want.get("min", want.get("count", 0)), want.get("max", want.get("count"))
+        add(f"task count for {want}", n >= lo and (hi is None or n <= hi), f"found {n}")
+    # Checks that only make sense when retrieval is on (the tools do not exist otherwise).
+    if rag:
+        used = [s.tool for s in result.steps if s.ok]
+        for name in as_list(expect.get("tool_called")):
+            add(f"tool called: {name}", name in used, f"tools used: {', '.join(used) or 'none'}")
+        if expect.get("citation_present"):
+            add("reply cites a retrieved source", bool(result.citations) and any(
+                c.lower() in (result.reply or "").lower() for c in result.citations),
+                f"retrieved {len(result.citations)} source(s)")
+        if expect.get("no_output_warnings"):
+            add("no output-check warnings", not result.output_warnings, "; ".join(result.output_warnings))
     return checks
 
 
@@ -132,7 +156,9 @@ def evaluate(expect: dict, result: AgentResult, before: dict, owner: Owner) -> l
 # ---------------------------------------------------------------------------
 
 KNOWN_CHECKS = {"blocked", "unchanged", "task_exists", "total_tasks_change", "no_conflicts",
-                "pending_removal", "no_write_tools", "reply_mentions_any", "refuses_with_vet"}
+                "pending_removal", "no_write_tools", "reply_mentions_any", "refuses_with_vet",
+                "task_count_for", "tool_called", "citation_present", "no_output_warnings"}
+KNOWN_COUNT_FIELDS = {"pet", "description_any", "count", "min", "max"}
 KNOWN_TASK_FIELDS = {"pet", "description_any", "time", "time_not", "due_date", "frequency", "completed"}
 
 
@@ -154,20 +180,29 @@ def load_cases(path: Path = DEFAULT_CASES) -> dict:
             bad = set(item) - KNOWN_TASK_FIELDS
             if bad:
                 raise ValueError(f"case {case['id']!r}: unknown task field(s) {sorted(bad)}")
+        for item in expect.get("task_count_for", []) or []:
+            bad = set(item) - KNOWN_COUNT_FIELDS
+            if bad:
+                raise ValueError(f"case {case['id']!r}: unknown task_count_for field(s) {sorted(bad)}")
+        if case.get("start", "demo") not in STARTS:
+            raise ValueError(f"case {case['id']!r}: unknown start {case['start']!r} (use one of {sorted(STARTS)})")
     return data
 
 
-def run_case(case: dict, client: LLMClient, today: date, few_shot: bool, logger=None) -> dict:
-    owner = demo_owner(today)
+def run_case(case: dict, client: LLMClient, today: date, few_shot: bool, logger=None,
+             rag: Optional[bool] = None) -> dict:
+    rag = rag_enabled_by_default() if rag is None else rag
+    owner = STARTS[case.get("start", "demo")](today)
     before = owner.to_dict()
     started = time.perf_counter()
-    result = PawPalAgent(owner, client, logger=logger, today=today, few_shot=few_shot).run(case["request"])
-    checks = evaluate(case.get("expect", {}), result, before, owner)
+    result = PawPalAgent(owner, client, logger=logger, today=today, few_shot=few_shot, rag=rag).run(case["request"])
+    checks = evaluate(case.get("expect", {}), result, before, owner, rag=rag)
     return {
         "id": case["id"],
         "tags": case.get("tags", []),
         "request": case["request"],
         "few_shot": few_shot,
+        "rag": rag,
         "passed": all(c["ok"] for c in checks),
         "failed_checks": [f"{c['check']}: {c['detail']}".rstrip(": ") for c in checks if not c["ok"]],
         "confidence": result.confidence,
@@ -179,6 +214,7 @@ def run_case(case: dict, client: LLMClient, today: date, few_shot: bool, logger=
         "llm_calls": result.llm_calls,
         "seconds": round(time.perf_counter() - started, 1),
         "run_id": result.run_id,
+        "citations": list(result.citations),
         "reply": (result.reply or "")[:300],
     }
 
@@ -202,11 +238,38 @@ def git_commit() -> str:
         return "unknown"
 
 
+def resolve_modes(modes: list) -> list[tuple[bool, bool]]:
+    """Turn bools / (few_shot, rag) pairs into concrete (few_shot, rag) pairs."""
+    default_rag = rag_enabled_by_default()
+    resolved = []
+    for m in modes:
+        few_shot, rag = (m, None) if isinstance(m, bool) else m
+        resolved.append((few_shot, default_rag if rag is None else rag))
+    return resolved
+
+
+def mode_tag(mode: tuple[bool, bool]) -> str:
+    few_shot, rag = mode
+    return f"few-shot {'on ' if few_shot else 'off'} · RAG {'on ' if rag else 'off'}"
+
+
+def mode_label(mode: tuple[bool, bool], modes: list[tuple[bool, bool]]) -> str:
+    """Name a mode by the setting(s) that differ between the modes of this run."""
+    few_shot_varies = len({m[0] for m in modes}) > 1
+    rag_varies = len({m[1] for m in modes}) > 1
+    parts = []
+    if few_shot_varies or not rag_varies:
+        parts.append(f"Few-shot {'on' if mode[0] else 'off'}")
+    if rag_varies:
+        parts.append(f"RAG {'on' if mode[1] else 'off'}")
+    return ", ".join(parts)
+
+
 def run_all(
     cases: list[dict],
     client: LLMClient,
     today: date,
-    modes: list[bool],
+    modes: list,
     run_file: Path,
     meta: dict,
     done: Optional[list[dict]] = None,
@@ -215,19 +278,23 @@ def run_all(
     sleep: Callable[[float], None] = time.sleep,
     out=sys.stdout,
 ) -> tuple[list[dict], bool]:
-    """Run every (mode, case) not already in `done`. Returns (records, completed)."""
+    """Run every (mode, case) not already in `done`. Returns (records, completed).
+
+    A mode is `few_shot` (a bool) or a `(few_shot, rag)` pair; rag None means the agent default.
+    """
     records = list(done or [])
-    finished = {(r["few_shot"], r["id"]) for r in records}
-    for few_shot in modes:
+    finished = {(r["few_shot"], r.get("rag", True), r["id"]) for r in records}
+    for mode in resolve_modes(modes):
+        few_shot, rag = mode
         for case in cases:
-            if (few_shot, case["id"]) in finished:
+            if (few_shot, rag, case["id"]) in finished:
                 continue
-            record = run_case(case, client, today, few_shot, logger)
+            record = run_case(case, client, today, few_shot, logger, rag=rag)
             records.append(record)
             _save(run_file, meta, records)
             mark = "PASS" if record["passed"] else "FAIL"
             conf = f"{record['confidence']:.2f}" if record["confidence"] is not None else " n/a"
-            print(f"  [{'few-shot on ' if few_shot else 'few-shot off'}] {mark}  {case['id']:<26} "
+            print(f"  [{mode_tag(mode)}] {mark}  {case['id']:<26} "
                   f"conf {conf}  tools {len(record['tools'])}", file=out)
             for failure in record["failed_checks"]:
                 print(f"        ✗ {failure}", file=out)
@@ -251,6 +318,15 @@ def _save(run_file: Path, meta: dict, records: list[dict]) -> None:
 
 def _mean(values: list[float]) -> Optional[float]:
     return round(sum(values) / len(values), 2) if values else None
+
+
+def record_mode(record: dict) -> tuple[bool, bool]:
+    return record["few_shot"], record.get("rag", True)
+
+
+def record_modes(records: list[dict]) -> list[tuple[bool, bool]]:
+    """The distinct modes in a run, in the order they first appear."""
+    return list(dict.fromkeys(record_mode(r) for r in records))
 
 
 def summarize(records: list[dict]) -> dict:
@@ -297,11 +373,10 @@ def results_markdown(meta: dict, records: list[dict], completed: bool) -> str:
         + ("" if completed else " · **incomplete (stopped early; resumable)**"),
         "",
     ]
-    for few_shot in (True, False):
-        mode_records = [r for r in records if r["few_shot"] is few_shot]
-        if not mode_records:
-            continue
-        label = "Few-shot on" if few_shot else "Few-shot off"
+    modes = record_modes(records)
+    for mode in modes:
+        mode_records = [r for r in records if record_mode(r) == mode]
+        label = mode_label(mode, modes)
         lines += summary_lines(label, summarize(mode_records)) + [""]
         lines += ["| Case | Tags | Result | Confidence | Tools called | Failed checks |", "|---|---|---|---|---|---|"]
         for r in mode_records:
@@ -311,11 +386,14 @@ def results_markdown(meta: dict, records: list[dict], completed: bool) -> str:
             lines.append(f"| `{r['id']}` | {', '.join(r['tags'])} | {'✅ pass' if r['passed'] else '❌ fail'} "
                          f"| {conf} | {tools} | {failed} |")
         lines.append("")
-    on = {r["id"]: r for r in records if r["few_shot"]}
-    off = {r["id"]: r for r in records if not r["few_shot"]}
+    varies = "rag" if len({m[1] for m in modes}) > 1 else "few_shot"
+    name = "RAG" if varies == "rag" else "Few-shot"
+    key = (lambda r: r.get("rag", True)) if varies == "rag" else (lambda r: r["few_shot"])  # noqa: E731
+    on = {r["id"]: r for r in records if key(r)}
+    off = {r["id"]: r for r in records if not key(r)}
     both = [i for i in on if i in off]
     if both:
-        lines += ["### Few-shot on vs. off (same cases)", "",
+        lines += [f"### {name} on vs. off (same cases)", "",
                   "| Case | On | Off | Tool calls on / off |", "|---|---|---|---|"]
         for i in both:
             lines.append(f"| `{i}` | {'✅' if on[i]['passed'] else '❌'} | {'✅' if off[i]['passed'] else '❌'} "
@@ -344,6 +422,8 @@ def main(argv: Optional[list[str]] = None, client: Optional[LLMClient] = None,
     p = argparse.ArgumentParser(prog="run_evals", description="Evaluate the PawPal+ agent on predefined cases.")
     p.add_argument("--compare-few-shot", action="store_true", help="run every case with few-shot on and off")
     p.add_argument("--no-few-shot", action="store_true", help="run with few-shot off only")
+    p.add_argument("--compare-rag", action="store_true", help="run every case with retrieval (RAG) on and off")
+    p.add_argument("--no-rag", action="store_true", help="run with retrieval (RAG) off only")
     p.add_argument("--tag", action="append", default=[], help="only cases with this tag (repeatable)")
     p.add_argument("--only", action="append", default=[], help="only this case id (repeatable)")
     p.add_argument("--model", help="Gemini model (default: PAWPAL_MODEL or the built-in default)")
@@ -363,7 +443,12 @@ def main(argv: Optional[list[str]] = None, client: Optional[LLMClient] = None,
     if not cases:
         print("No cases match the filters.", file=out)
         return 2
-    modes = [True, False] if args.compare_few_shot else [not args.no_few_shot]
+    if args.compare_few_shot and args.compare_rag:
+        print("Choose one comparison: --compare-few-shot or --compare-rag.", file=out)
+        return 2
+    few_shot_modes = [True, False] if args.compare_few_shot else [not args.no_few_shot]
+    rag_modes = [True, False] if args.compare_rag else [False if args.no_rag else None]
+    modes = [(f, r) for r in rag_modes for f in few_shot_modes]
     logger = setup_agent_logger()
 
     if client is None:
@@ -385,7 +470,7 @@ def main(argv: Optional[list[str]] = None, client: Optional[LLMClient] = None,
             "model": getattr(client, "model", "?"),
             "commit": git_commit(),
             "today": today.isoformat(),
-            "modes": ["few-shot on" if m else "few-shot off" for m in modes],
+            "modes": [mode_tag(m).replace("  ", " ").strip() for m in resolve_modes(modes)],
             "run_file": shown(run_file),
         }
 
@@ -394,12 +479,10 @@ def main(argv: Optional[list[str]] = None, client: Optional[LLMClient] = None,
     records, completed = run_all(cases, client, today, modes, run_file, meta, done, args.delay, logger, sleep, out)
 
     print("", file=out)
-    for few_shot in modes:
-        mode_records = [r for r in records if r["few_shot"] is few_shot]
-        if mode_records:
-            label = "Few-shot on" if few_shot else "Few-shot off"
-            for line in summary_lines(label, summarize(mode_records)):
-                print(line.replace("**", ""), file=out)
+    shown_modes = record_modes(records)
+    for mode in shown_modes:
+        for line in summary_lines(mode_label(mode, shown_modes), summarize([r for r in records if record_mode(r) == mode])):
+            print(line.replace("**", ""), file=out)
     if completed:
         append_results(results_markdown(meta, records, completed), results_md)
         print(f"\nResults appended to {shown(results_md)}; "

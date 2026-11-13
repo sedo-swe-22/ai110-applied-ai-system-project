@@ -141,3 +141,64 @@ def test_internal_errors_never_escape(ctx, monkeypatch):
     monkeypatch.setitem(TOOL_REGISTRY, "list_pets", replace(TOOL_REGISTRY["list_pets"], func=boom))
     out = run_tool(ctx, "list_pets")
     assert out["ok"] is False and "internal error" in out["error"]
+
+
+# ---------------------------------------------------------------- retrieval tools (RAG)
+
+from agent_tools import tool_names, tool_schemas  # noqa: E402
+
+
+def test_retrieval_tools_are_registered_and_read_only():
+    for name in ("lookup_care_guidelines", "find_similar_tasks"):
+        spec = TOOL_REGISTRY[name]
+        assert spec.retrieval and not spec.writes and not spec.destructive
+
+
+def test_rag_off_hides_the_retrieval_tools():
+    on, off = {s["name"] for s in tool_schemas(True)}, {s["name"] for s in tool_schemas(False)}
+    assert on - off == {"lookup_care_guidelines", "find_similar_tasks"}
+    assert tool_names(False) == off and tool_names(True) == on
+
+
+def test_lookup_care_guidelines_returns_cited_passages(ctx):
+    out = run_tool(ctx, "lookup_care_guidelines",
+                   {"query": "puppy daily routine feeding walks play", "species": "Dog", "life_stage": "puppy"})
+    assert out["ok"] and not out["none_found"]
+    cites = [h["cite"] for h in out["hits"]]
+    assert "[dog-puppy.md: Feeding]" in cites
+    assert all({"cite", "text"} == set(h) for h in out["hits"])
+    feeding = next(h for h in out["hits"] if h["cite"] == "[dog-puppy.md: Feeding]")
+    assert "3 meals" in feeding["text"]
+
+
+def test_lookup_with_no_match_says_so_and_warns_against_inventing(ctx):
+    out = run_tool(ctx, "lookup_care_guidelines", {"query": "quantum physics homework"})
+    assert out["ok"] and out["none_found"] and out["hits"] == []
+    assert "Do not invent" in out["note"]
+
+
+def test_lookup_for_unknown_species_only_returns_generic_guidance(ctx):
+    out = run_tool(ctx, "lookup_care_guidelines", {"query": "daily routine", "species": "axolotl"})
+    assert out["ok"] and out["hits"]
+    assert all(h["cite"].startswith("[general-routine.md") or h["cite"].startswith("[grooming.md")
+               or h["cite"].startswith("[medication-scheduling.md") for h in out["hits"])
+
+
+@pytest.mark.parametrize("args", [{"query": ""}, {"query": "   "}, {"query": "x" * 201}, {}])
+def test_lookup_rejects_bad_queries(ctx, args):
+    out = run_tool(ctx, "lookup_care_guidelines", args)
+    assert out["ok"] is False and "query" in out["error"]
+
+
+def test_find_similar_tasks_searches_the_live_history(ctx):
+    out = run_tool(ctx, "find_similar_tasks", {"query": "walk", "pet_name": "max"})
+    assert out["ok"] and [h["cite"] for h in out["hits"]] == ["[history: Max:0]"]
+    assert "08:00" in out["hits"][0]["text"]
+    run_tool(ctx, "add_task", {"pet_name": "Mochi", "description": "Walk", "time": "12:00", "due_date": TOMORROW})
+    again = run_tool(ctx, "find_similar_tasks", {"query": "walk"})
+    assert {h["cite"] for h in again["hits"]} == {"[history: Max:0]", "[history: Mochi:1]"}
+
+
+def test_find_similar_tasks_unknown_pet_is_an_error_not_a_crash(ctx):
+    out = run_tool(ctx, "find_similar_tasks", {"query": "walk", "pet_name": "Rex"})
+    assert out["ok"] is False and "Rex" in out["error"]

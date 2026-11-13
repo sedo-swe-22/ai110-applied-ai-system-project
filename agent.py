@@ -5,7 +5,7 @@ One call to `PawPalAgent.run(message)` handles one user request:
 1. Input guardrails (no LLM call if the request is blocked).
 2. Loop: Gemini proposes function calls; each passes the tool guardrails and runs
    against the real Owner/Scheduler; the results go back to Gemini. The loop ends
-   when Gemini answers with text only, or fails at the 10-call cap.
+   when Gemini answers with text only, or fails at the tool-call cap.
 3. Self-check in code: every change the agent reported must really exist, and
    the slots it touched must have no clashes. Combined with the model's own
    CONFIDENCE line, this gives the confidence score.
@@ -36,6 +36,7 @@ from agent_tools import (
     ToolError,
     resolve_ref,
     run_tool,
+    tool_names,
     tool_schemas,
     task_view,
 )
@@ -45,7 +46,7 @@ from pawpal_system import Owner
 
 
 # ---------------------------------------------------------------------------
-# System prompt, built from sections (phase 2 adds a retrieval section)
+# System prompt, built from sections (a retrieval section is added when RAG is on)
 # ---------------------------------------------------------------------------
 
 ROLE_SECTION = (
@@ -104,11 +105,29 @@ Reply: Sure - what day and time is Max's vet visit?
 CONFIDENCE: 0.8 | need the day and time before adding anything"""
 
 
+RETRIEVAL_SECTION = """Retrieval (RAG):
+You can look things up before you plan. Use these tools:
+- lookup_care_guidelines(query, species, life_stage): scheduling guidelines (meals per day, walk length, play, grooming, vet visits, medication reminders).
+- find_similar_tasks(query, pet_name): the owner's own tasks, e.g. to copy a routine from one pet to another.
+R1. When asked to set up a routine or plan, or how often or when to do something, call lookup_care_guidelines FIRST. If the species or age (puppy, kitten, adult, senior) is missing, ask one short question instead of guessing.
+R2. Make the query name the species, the age and what you need, e.g. "puppy daily routine feeding walks play", and pass species and life_stage when you know them.
+R3. Base the number of tasks, their times and their frequencies on the retrieved text. Create each task with add_task (you may make all the add_task calls together in one step), then call check_conflicts as usual.
+R4. In your reply, name what you set up in one or two sentences and add the cite text of each source you used, exactly as returned, e.g. [dog-puppy.md: Feeding]. Do not paste whole passages. Never write a cite you did not receive.
+R5. If a lookup returns none_found, say there is no guideline for that and ask what the user wants. Do not invent times or frequencies.
+R6. Guidelines are about scheduling only. They are not medical advice."""
+
+
 def few_shot_enabled_by_default() -> bool:
     return os.environ.get("PAWPAL_FEW_SHOT", "on").strip().lower() not in {"off", "0", "false", "no"}
 
 
-def build_system_prompt(owner: Owner, today: date, few_shot: bool = True, extra_sections: tuple[str, ...] = ()) -> str:
+def rag_enabled_by_default() -> bool:
+    return os.environ.get("PAWPAL_RAG", "on").strip().lower() not in {"off", "0", "false", "no"}
+
+
+def build_system_prompt(
+    owner: Owner, today: date, few_shot: bool = True, extra_sections: tuple[str, ...] = (), rag: bool = False
+) -> str:
     pets = ", ".join(f"{p.name} ({p.breed})" for p in owner.pets) or "none yet"
     sections = [
         ROLE_SECTION.format(owner=owner.name),
@@ -117,6 +136,8 @@ def build_system_prompt(owner: Owner, today: date, few_shot: bool = True, extra_
     ]
     if few_shot:
         sections.append(FEW_SHOT_SECTION)
+    if rag:
+        sections.append(RETRIEVAL_SECTION)
     sections.extend(extra_sections)
     return "\n\n".join(sections)
 
@@ -155,6 +176,7 @@ class AgentResult:
     confidence_reason: Optional[str] = None
     output_warnings: list[str] = field(default_factory=list)
     llm_calls: int = 0
+    citations: list[str] = field(default_factory=list)  # sources returned by successful lookups
 
     @property
     def confidence(self) -> Optional[float]:
@@ -205,6 +227,7 @@ class PawPalAgent:
         today: Optional[date] = None,
         few_shot: Optional[bool] = None,
         max_tool_calls: int = guardrails.MAX_TOOL_CALLS,
+        rag: Optional[bool] = None,
     ) -> None:
         self.owner = owner
         self.client = client
@@ -212,6 +235,7 @@ class PawPalAgent:
         self.save_fn = save_fn
         self._today = today
         self.few_shot = few_shot_enabled_by_default() if few_shot is None else few_shot
+        self.rag = rag_enabled_by_default() if rag is None else rag
         self.max_tool_calls = max_tool_calls
 
     @property
@@ -225,7 +249,7 @@ class PawPalAgent:
         run_id = uuid.uuid4().hex[:8]
         today = self.today
         self._log("run_start", run_id, message=message, model=getattr(self.client, "model", "?"),
-                  today=today.isoformat(), few_shot=self.few_shot)
+                  today=today.isoformat(), few_shot=self.few_shot, rag=self.rag)
 
         # 1. Input guardrails: blocked requests never reach the model.
         verdict = guardrails.check_input(message, [p.name for p in self.owner.pets])
@@ -264,7 +288,10 @@ class PawPalAgent:
 
         # 4. Output check against the successful tool results.
         succeeded = [s.tool for s in result.steps if s.ok and not s.blocked]
-        result.output_warnings = guardrails.check_output(result.reply, succeeded, len(result.pending_actions))
+        result.output_warnings = guardrails.check_output(
+            result.reply, succeeded, len(result.pending_actions),
+            retrieved_cites=result.citations if self.rag else None,
+        )
         for warning in result.output_warnings:
             self._log("output_warning", run_id, level=logging.WARNING, warning=warning)
 
@@ -279,8 +306,8 @@ class PawPalAgent:
         return result
 
     def _loop(self, message: str, ctx: ToolContext, result: AgentResult) -> str:
-        system = build_system_prompt(self.owner, ctx.today, self.few_shot)
-        tools = tool_schemas()
+        system = build_system_prompt(self.owner, ctx.today, self.few_shot, rag=self.rag)
+        tools = tool_schemas(include_rag=self.rag)
         history: list[dict] = [{"role": "user", "text": message}]
         max_llm_calls = self.max_tool_calls + 3
 
@@ -308,7 +335,7 @@ class PawPalAgent:
             raise ToolCallCapExceeded(f"The assistant hit the limit of {self.max_tool_calls} tool calls.")
         n = len(result.steps) + 1
         started = time.perf_counter()
-        verdict = guardrails.check_tool_call(call.name, call.args, ctx.today)
+        verdict = guardrails.check_tool_call(call.name, call.args, ctx.today, tool_names(include_rag=self.rag))
         if verdict.allowed:
             output = run_tool(ctx, call.name, call.args)
             blocked = False
@@ -320,6 +347,12 @@ class PawPalAgent:
         result.steps.append(Step(n=n, tool=call.name, args=dict(call.args), ok=ok, result=output, ms=ms, blocked=blocked))
         if ok and output.get("summary"):
             result.actions_taken.append(output["summary"])
+        if ok and not blocked and call.name in TOOL_REGISTRY and TOOL_REGISTRY[call.name].retrieval:
+            for hit in output.get("hits", []):
+                if hit["cite"] not in result.citations:
+                    result.citations.append(hit["cite"])
+            self._log("retrieval", result.run_id, tool=call.name, query=call.args.get("query"),
+                      cites=[h["cite"] for h in output.get("hits", [])], none_found=output.get("none_found"))
         self._log("tool_blocked" if blocked else "tool_call", result.run_id,
                   level=logging.WARNING if not ok else logging.INFO,
                   n=n, tool=call.name, args=call.args, ok=ok, ms=ms, result=output)

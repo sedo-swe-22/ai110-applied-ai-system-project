@@ -12,7 +12,8 @@ Three layers, all plain Python (no LLM calls, so they are fast, free and testabl
    capped at MAX_TOOL_CALLS calls.
 3. Output (`check_output`): runs on the final reply. Flags claims that the
    successful tool results do not support (e.g. "I added..." with no successful
-   add_task, or "deleted" when the removal is only waiting for confirmation).
+   add_task, or "deleted" when the removal is only waiting for confirmation),
+   and, when RAG is on, citations that no lookup actually returned.
 """
 
 from __future__ import annotations
@@ -22,10 +23,12 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Iterable, Optional
 
+import retrieval
 from agent_tools import TOOL_REGISTRY, ToolError, parse_date
 
 MAX_INPUT_CHARS = 1000
-MAX_TOOL_CALLS = 10
+# A full routine is one lookup, up to ~10 add_task calls and a conflict check or two.
+MAX_TOOL_CALLS = 16
 MAX_DAYS_FROM_TODAY = 365
 
 EMERGENCY_REPLY = (
@@ -137,9 +140,15 @@ def check_input(text: str, pet_names: Iterable[str] = ()) -> InputVerdict:
 DATE_ARGS = ("due_date", "date")
 
 
-def check_tool_call(name: str, args: Optional[dict], today: date) -> ToolVerdict:
-    """Check one tool call before it runs. Bad *formats* are left to the tool itself."""
-    if name not in TOOL_REGISTRY:
+def check_tool_call(
+    name: str, args: Optional[dict], today: date, allowed_tools: Optional[Iterable[str]] = None
+) -> ToolVerdict:
+    """Check one tool call before it runs. Bad *formats* are left to the tool itself.
+
+    `allowed_tools` narrows the registry (the agent leaves the retrieval tools out when RAG is off).
+    """
+    allowed = TOOL_REGISTRY.keys() if allowed_tools is None else set(allowed_tools)
+    if name not in TOOL_REGISTRY or name not in allowed:
         return ToolVerdict(False, f"tool {name!r} is not allowed")
     for key in DATE_ARGS:
         value = (args or {}).get(key)
@@ -167,10 +176,31 @@ _CLAIMS = {
 _DELETE_CLAIM = _rx(r"(\bI(?:'ve| have)?\s+(?:removed|deleted)\b|\b(?:has|have) been (?:removed|deleted)\b|^\s*[-*]?\s*(?:removed|deleted)\b)")
 
 
-def check_output(reply: str, successful_tools: Iterable[str], pending_count: int = 0) -> list[str]:
-    """Return warnings for claims in the reply that tool results don't support."""
+_SOURCE_CLAIM = _rx(r"\b(according to|based on|per|from)\b.{0,25}\b(guidelines?|care guide\w*|knowledge|"
+                    r"care schedules?)\b")
+
+
+def check_output(
+    reply: str,
+    successful_tools: Iterable[str],
+    pending_count: int = 0,
+    retrieved_cites: Optional[Iterable[str]] = None,
+) -> list[str]:
+    """Return warnings for claims in the reply that tool results don't support.
+
+    Pass `retrieved_cites` (the citations returned by successful lookups) when RAG is on;
+    leave it None when RAG is off, and citations are not checked.
+    """
     done = set(successful_tools)
     warnings = []
+    if retrieved_cites is not None:
+        known = {retrieval.normalize_cite(c) for c in retrieved_cites}
+        for cite in dict.fromkeys(retrieval.find_citations(reply)):
+            if retrieval.normalize_cite(cite) not in known:
+                warnings.append(f"The reply cites {cite}, but no lookup returned that source.")
+        looked_up = done & {n for n, spec in TOOL_REGISTRY.items() if spec.retrieval}
+        if _SOURCE_CLAIM.search(reply or "") and not looked_up:
+            warnings.append("The reply says it follows the guidelines, but no lookup was made.")
     for tool, pattern in _CLAIMS.items():
         if re.search(pattern, reply or "", re.IGNORECASE | re.MULTILINE) and tool not in done:
             warnings.append(f"The reply claims a '{tool}' change, but no {tool} call succeeded.")

@@ -16,34 +16,10 @@ st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
 st.title("🐾 PawPal+")
 
-st.markdown(
-    """
-Welcome to PawPal+. Add pets and tasks below, then generate today's schedule.
-
-The UI is wired to the classes in `pawpal_system.py`: `Owner`, `Pet`, `Task` and `Scheduler`.
-"""
+st.caption(
+    "A pet-care planner. Add your pets, ask the assistant in plain English or add tasks "
+    "yourself, and PawPal+ keeps your day organized and free of time clashes."
 )
-
-with st.expander("Scenario", expanded=True):
-    st.markdown(
-        """
-**PawPal+** is a pet care planning assistant. It helps a pet owner plan care tasks
-for their pet(s) based on constraints like time, priority, and preferences.
-
-You will design and implement the scheduling logic and connect it to this Streamlit UI.
-"""
-    )
-
-with st.expander("What you need to build", expanded=True):
-    st.markdown(
-        """
-At minimum, your system should:
-- Represent pet care tasks (what needs to happen, how long it takes, priority)
-- Represent the pet and the owner (basic info and preferences)
-- Build a plan/schedule for a day that chooses and orders tasks based on constraints
-- Explain the plan (why each task was chosen and when it happens)
-"""
-    )
 
 st.divider()
 
@@ -82,27 +58,17 @@ st.subheader("Owner & Pets")
 owner.name = st.text_input("Owner name", value=owner.name)
 
 with st.form("add_pet", clear_on_submit=True):
-    pet_name = st.text_input("Pet name", value="Mochi")
-    breed = st.text_input("Breed", value="Shiba Inu")
+    pet_name = st.text_input("Pet name", placeholder="e.g. Mochi")
+    breed = st.text_input("Breed (optional)", placeholder="e.g. Shiba Inu")
     if st.form_submit_button("Add pet") and pet_name.strip():
         owner.add_pet(Pet(pet_name.strip(), breed.strip()))
         save()
 
 if owner.pets:
-    st.write(f"{owner.name}'s pets: " + ", ".join(f"{p.name} ({p.breed})" for p in owner.pets))
+    st.write(f"{owner.name}'s pets: " + ", ".join(f"{p.name} ({p.breed})" if p.breed else p.name for p in owner.pets))
 else:
     st.info("No pets yet. Add one above.")
 
-# ---------------------------------------------------------------------------
-# 🤖 Assistant: the Gemini-powered agent (agent.py) working on the same data
-# ---------------------------------------------------------------------------
-
-st.divider()
-st.subheader("🤖 Assistant")
-st.caption(
-    'Ask in plain English, e.g. "Add a 9am walk for Max tomorrow", "What\'s on today?" or '
-    '"Move Mochi\'s grooming to 11:00". Every step is shown below the reply and logged to logs/agent.jsonl.'
-)
 
 agent_logger = setup_agent_logger()
 st.session_state.setdefault("chat", [])
@@ -130,6 +96,8 @@ def render_result(result: AgentResult) -> None:
         st.error(f"Run failed and was rolled back: {result.error}")
     if result.actions_taken:
         st.markdown("**Actions taken**\n" + "\n".join(f"- {a}" for a in result.actions_taken))
+    if result.citations:
+        st.markdown("**Sources retrieved**\n" + "\n".join(f"- `{c}`" for c in result.citations))
     for warning in result.output_warnings:
         st.warning(warning, icon="🛡️")
     if not result.failed:
@@ -148,56 +116,6 @@ def render_result(result: AgentResult) -> None:
         for line in result.check_details:
             st.text(line)
 
-
-for message in st.session_state.chat:
-    with st.chat_message(message["role"]):
-        if message["role"] == "user":
-            st.markdown(message["text"])
-        else:
-            render_result(message["result"])
-
-if "assistant_flash" in st.session_state:
-    st.success(st.session_state.pop("assistant_flash"))
-
-# Destructive actions wait here until the owner confirms. The app (not the model) deletes.
-for i, (run_id, action) in enumerate(list(st.session_state.pending)):
-    st.warning(f"**Needs your confirmation:** {action.summary}", icon="🗑️")
-    confirm_col, cancel_col = st.columns(2)
-    if confirm_col.button("Confirm delete", key=f"confirm-{run_id}-{i}", type="primary"):
-        outcome = execute_pending(owner, action)
-        log_event(agent_logger, "pending_confirmed", run_id, action=action.summary,
-                  ok=outcome["ok"], error=outcome.get("error"))
-        st.session_state.pending.pop(i)
-        if outcome["ok"]:
-            save()
-            st.session_state.assistant_flash = outcome["summary"]
-        else:
-            st.session_state.assistant_flash = f"Could not delete: {outcome['error']}"
-        st.rerun()
-    if cancel_col.button("Cancel", key=f"cancel-{run_id}-{i}"):
-        log_event(agent_logger, "pending_cancelled", run_id, action=action.summary)
-        st.session_state.pending.pop(i)
-        st.session_state.assistant_flash = f"Cancelled: {action.summary}. Nothing was deleted."
-        st.rerun()
-
-llm_client = get_llm_client()
-if llm_client is None:
-    st.info(
-        "The assistant needs a Gemini API key. Copy `.env.example` to `.env`, set "
-        "`GEMINI_API_KEY`, then restart the app. The rest of PawPal+ works without it."
-    )
-
-prompt = st.chat_input("Ask PawPal+ to plan your pets' care…", disabled=llm_client is None)
-if prompt and llm_client is not None:
-    agent = PawPalAgent(owner, llm_client, logger=agent_logger, save_fn=save)
-    with st.spinner("PawPal+ is planning…"):
-        result = agent.run(prompt)
-    st.session_state.chat.append({"role": "user", "text": prompt})
-    st.session_state.chat.append({"role": "assistant", "result": result})
-    st.session_state.pending = [(result.run_id, a) for a in result.pending_actions]
-    st.rerun()  # redraw so the schedule below shows the agent's changes
-
-st.markdown("### Tasks")
 
 scheduler = Scheduler(owner)
 
@@ -219,89 +137,146 @@ def task_row(task: Task) -> dict:
         "Status": "Done" if task.completed else "To do",
     }
 
-
-if owner.pets:
-    selected = st.selectbox("Pet", [p.name for p in owner.pets])
-    pet = next(p for p in owner.pets if p.name == selected)
-
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        description = st.text_input("Task", value="Morning walk")
-    with col2:
-        time = st.text_input("Time (HH:MM)", value="08:00")
-    with col3:
-        frequency = st.selectbox("Frequency", ["once", "daily", "weekly"])
-    with col4:
-        priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
-
-    if st.button("Add task"):
-        try:
-            pet.add_task(Task(description, time, frequency=frequency, priority=priority))
-        except ValueError:
-            st.error("Time must be in HH:MM format, e.g. 08:00.")
-        else:
-            save()
-            st.success(f"Added '{description}' for {pet.name} at {time}.")
-else:
-    st.info("Add a pet above to start adding tasks.")
-
 st.divider()
+tab_assistant, tab_schedule, tab_add, tab_browse = st.tabs(
+    ["🤖 Assistant", "📅 Today's Schedule", "➕ Add a Task", "🗂️ All Tasks"]
+)
 
-st.subheader("Today's Schedule")
+# The add-task form runs before the schedule is drawn so a new task shows up straight away.
+with tab_add:
+    if owner.pets:
+        selected = st.selectbox("Pet", [p.name for p in owner.pets])
+        pet = next(p for p in owner.pets if p.name == selected)
 
-if "flash" in st.session_state:
-    st.success(st.session_state.pop("flash"))
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            description = st.text_input("Task", placeholder="e.g. Morning walk")
+        with col2:
+            time = st.text_input("Time (HH:MM)", placeholder="e.g. 08:00")
+        with col3:
+            frequency = st.selectbox("Frequency", ["once", "daily", "weekly"])
+        with col4:
+            priority = st.selectbox("Priority", ["low", "medium", "high"], index=2)
 
-conflicts = scheduler.detect_conflicts(suggest=True)
-if conflicts:
-    st.warning(
-        f"**{len(conflicts)} scheduling conflict(s).** You can't do these at the same "
-        "time, so move one task to the suggested free slot:"
-    )
-    for conflict in conflicts:
-        st.warning(conflict, icon="⚠️")
-elif owner.get_all_tasks():
-    st.success("No scheduling conflicts.")
-
-todays = scheduler.get_todays_schedule()
-if todays:
-    st.caption("Sorted by time; higher priority first when times match.")
-    st.table([task_row(t) for t in todays])
-    st.markdown("**Mark a task done**")
-    for t in todays:
-        label = f"{t.time}  {pet_name_of(t)}: {t.description}"
-        if st.button(f"✔ {label}", key=f"done-{id(t)}"):
-            owner_pet = next(p for p in owner.pets if t in p.tasks)
-            nxt = scheduler.mark_task_complete(owner_pet, t)
-            msg = f"Completed '{t.description}'."
-            if nxt:
-                msg += f" Next one is due {nxt.due_date}."
-            st.session_state.flash = msg
-            save()
-            st.rerun()
-else:
-    st.info("Nothing scheduled for today.")
-
-st.divider()
-
-st.subheader("Browse All Tasks")
-
-if owner.get_all_tasks():
-    fcol1, fcol2 = st.columns(2)
-    with fcol1:
-        pet_filter = st.selectbox("Filter by pet", ["All pets"] + [p.name for p in owner.pets])
-    with fcol2:
-        status_filter = st.radio("Status", ["All", "To do", "Done"], horizontal=True)
-
-    completed = {"All": None, "To do": False, "Done": True}[status_filter]
-    matches = scheduler.filter_tasks(
-        pet_name=None if pet_filter == "All pets" else pet_filter, completed=completed
-    )
-    if matches:
-        st.table([task_row(t) for t in scheduler.sort_by_time(matches)])
+        if st.button("Add task"):
+            if not description.strip():
+                st.error("Please enter a task name.")
+            else:
+                try:
+                    pet.add_task(Task(description.strip(), time.strip(), frequency=frequency, priority=priority))
+                except ValueError:
+                    st.error("Time must be in HH:MM format, e.g. 08:00.")
+                else:
+                    save()
+                    st.success(f"Added '{description.strip()}' for {pet.name} at {time.strip()}.")
     else:
-        st.info("No tasks match these filters.")
-else:
-    st.info("No tasks yet.")
+        st.info("Add a pet above to start adding tasks.")
+
+with tab_assistant:
+    st.caption(
+        'Ask in plain English, e.g. "Add a 9am walk for Max tomorrow", "What\'s on today?" or '
+        '"Move Mochi\'s grooming to 11:00". Every step is shown below the reply and logged to logs/agent.jsonl.'
+    )
+
+    for message in st.session_state.chat:
+        with st.chat_message(message["role"]):
+            if message["role"] == "user":
+                st.markdown(message["text"])
+            else:
+                render_result(message["result"])
+
+    if "assistant_flash" in st.session_state:
+        st.success(st.session_state.pop("assistant_flash"))
+
+    # Destructive actions wait here until the owner confirms. The app (not the model) deletes.
+    for i, (run_id, action) in enumerate(list(st.session_state.pending)):
+        st.warning(f"**Needs your confirmation:** {action.summary}", icon="🗑️")
+        confirm_col, cancel_col = st.columns(2)
+        if confirm_col.button("Confirm delete", key=f"confirm-{run_id}-{i}", type="primary"):
+            outcome = execute_pending(owner, action)
+            log_event(agent_logger, "pending_confirmed", run_id, action=action.summary,
+                      ok=outcome["ok"], error=outcome.get("error"))
+            st.session_state.pending.pop(i)
+            if outcome["ok"]:
+                save()
+                st.session_state.assistant_flash = outcome["summary"]
+            else:
+                st.session_state.assistant_flash = f"Could not delete: {outcome['error']}"
+            st.rerun()
+        if cancel_col.button("Cancel", key=f"cancel-{run_id}-{i}"):
+            log_event(agent_logger, "pending_cancelled", run_id, action=action.summary)
+            st.session_state.pending.pop(i)
+            st.session_state.assistant_flash = f"Cancelled: {action.summary}. Nothing was deleted."
+            st.rerun()
+
+    llm_client = get_llm_client()
+    if llm_client is None:
+        st.info(
+            "The assistant needs a Gemini API key. Copy `.env.example` to `.env`, set "
+            "`GEMINI_API_KEY`, then restart the app. The rest of PawPal+ works without it."
+        )
+
+    prompt = st.chat_input("Ask PawPal+ to plan your pets' care…", disabled=llm_client is None)
+    if prompt and llm_client is not None:
+        agent = PawPalAgent(owner, llm_client, logger=agent_logger, save_fn=save)
+        with st.spinner("PawPal+ is planning…"):
+            result = agent.run(prompt)
+        st.session_state.chat.append({"role": "user", "text": prompt})
+        st.session_state.chat.append({"role": "assistant", "result": result})
+        st.session_state.pending = [(result.run_id, a) for a in result.pending_actions]
+        st.rerun()  # redraw so the schedule below shows the agent's changes
+
+with tab_schedule:
+    if "flash" in st.session_state:
+        st.success(st.session_state.pop("flash"))
+
+    conflicts = scheduler.detect_conflicts(suggest=True)
+    if conflicts:
+        st.warning(
+            f"**{len(conflicts)} scheduling conflict(s).** You can't do these at the same "
+            "time, so move one task to the suggested free slot:"
+        )
+        for conflict in conflicts:
+            st.warning(conflict, icon="⚠️")
+    elif owner.get_all_tasks():
+        st.success("No scheduling conflicts.")
+
+    todays = scheduler.get_todays_schedule()
+    if todays:
+        st.caption("Sorted by time; higher priority first when times match.")
+        st.table([task_row(t) for t in todays])
+        st.markdown("**Mark a task done**")
+        for t in todays:
+            label = f"{t.time}  {pet_name_of(t)}: {t.description}"
+            if st.button(f"✔ {label}", key=f"done-{id(t)}"):
+                owner_pet = next(p for p in owner.pets if t in p.tasks)
+                nxt = scheduler.mark_task_complete(owner_pet, t)
+                msg = f"Completed '{t.description}'."
+                if nxt:
+                    msg += f" Next one is due {nxt.due_date}."
+                st.session_state.flash = msg
+                save()
+                st.rerun()
+    else:
+        st.info("Nothing scheduled for today.")
+
+with tab_browse:
+    if owner.get_all_tasks():
+        fcol1, fcol2 = st.columns(2)
+        with fcol1:
+            pet_filter = st.selectbox("Filter by pet", ["All pets"] + [p.name for p in owner.pets])
+        with fcol2:
+            status_filter = st.radio("Status", ["All", "To do", "Done"], horizontal=True)
+
+        completed = {"All": None, "To do": False, "Done": True}[status_filter]
+        matches = scheduler.filter_tasks(
+            pet_name=None if pet_filter == "All pets" else pet_filter, completed=completed
+        )
+        if matches:
+            st.table([task_row(t) for t in scheduler.sort_by_time(matches)])
+        else:
+            st.info("No tasks match these filters.")
+    else:
+        st.info("No tasks yet.")
 
 save()  # also persists edits such as a renamed owner

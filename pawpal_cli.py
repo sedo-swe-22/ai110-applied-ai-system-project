@@ -16,7 +16,7 @@ import json
 import sys
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 from dotenv import load_dotenv
 
@@ -46,9 +46,28 @@ def demo_owner(today: date) -> Owner:
     return owner
 
 
-def load_owner(path: Path, today: date, reset_demo: bool) -> Owner:
+def _one_pet(name: str, breed: str) -> Callable[[date], Owner]:
+    def build(today: date) -> Owner:
+        owner = Owner("Jordan")
+        owner.add_pet(Pet(name, breed))
+        return owner
+    return build
+
+
+# Made-up starting data. "demo" is the shared demo owner; the others are a single new pet with
+# no tasks (used by the retrieval evals and the evidence script, e.g. "my new puppy Biscuit").
+STARTS: dict[str, Callable[[date], Owner]] = {
+    "demo": demo_owner,
+    "puppy": _one_pet("Biscuit", "Labrador Retriever"),
+    "kitten": _one_pet("Luna", "Domestic Shorthair"),
+    "senior_dog": _one_pet("Rex", "Labrador Retriever"),
+    "axolotl": _one_pet("Axel", "Axolotl"),
+}
+
+
+def load_owner(path: Path, today: date, reset_demo: bool, start: str = "demo") -> Owner:
     if reset_demo or not path.exists():
-        owner = demo_owner(today)
+        owner = STARTS[start](today)
         owner.save_to_json(str(path))
         return owner
     return Owner.load_from_json(str(path))
@@ -67,6 +86,10 @@ def print_result(result: AgentResult, out=sys.stdout) -> None:
         w("\nActions taken:")
         for action in result.actions_taken:
             w(f"  - {action}")
+    if result.citations:
+        w("\nSources retrieved:")
+        for cite in result.citations:
+            w(f"  - {cite}")
     if result.steps:
         w("\nSteps:")
         for s in result.steps:
@@ -114,8 +137,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("request", help='What you want, e.g. "Add a 9am walk for Max tomorrow"')
     p.add_argument("--data", type=Path, default=DEFAULT_DATA, help="data file (default: data.json)")
     p.add_argument("--reset-demo", action="store_true", help="overwrite --data with the demo pets and tasks")
+    p.add_argument("--start", choices=sorted(STARTS), default="demo",
+                   help="which made-up data --reset-demo writes (default: demo = Max and Mochi with tasks; "
+                        "puppy, kitten, senior_dog and axolotl are one new pet with no tasks)")
     p.add_argument("--today", type=date.fromisoformat, help="treat this date (YYYY-MM-DD) as today")
     p.add_argument("--no-few-shot", action="store_true", help="turn off the few-shot examples in the prompt")
+    p.add_argument("--no-rag", action="store_true", help="turn off retrieval (no guideline or history lookups)")
     p.add_argument("--model", help="Gemini model (default: PAWPAL_MODEL or the built-in default)")
     group = p.add_mutually_exclusive_group()
     group.add_argument("--yes", action="store_true", help="auto-confirm destructive actions")
@@ -131,7 +158,7 @@ def main(argv: Optional[Sequence[str]] = None, client: Optional[LLMClient] = Non
     logger = setup_agent_logger()
 
     try:
-        owner = load_owner(args.data, today, args.reset_demo)
+        owner = load_owner(args.data, today, args.reset_demo, args.start)
     except ValueError as exc:
         print(f"Could not read {args.data}: {exc}", file=out)
         return 1
@@ -147,7 +174,7 @@ def main(argv: Optional[Sequence[str]] = None, client: Optional[LLMClient] = Non
 
     save = lambda: owner.save_to_json(str(args.data))  # noqa: E731
     agent = PawPalAgent(owner, client, logger=logger, save_fn=save, today=today,
-                        few_shot=False if args.no_few_shot else None)
+                        few_shot=False if args.no_few_shot else None, rag=False if args.no_rag else None)
     print(f"You: {args.request}\n", file=out)
     result = agent.run(args.request)
     print_result(result, out)

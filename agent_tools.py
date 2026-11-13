@@ -20,9 +20,12 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Optional
 
+import retrieval
 from pawpal_system import FREQUENCIES, PRIORITIES, Owner, Pet, Scheduler, Task
 
 MAX_DESCRIPTION_LENGTH = 100
+MAX_QUERY_LENGTH = 200
+MAX_HITS = 6
 
 
 class ToolError(ValueError):
@@ -62,6 +65,7 @@ class ToolSpec:
     func: Callable[..., dict]
     writes: bool = False  # changes tasks (triggers the self-check)
     destructive: bool = False  # needs user confirmation
+    retrieval: bool = False  # looks things up (RAG); hidden and refused when RAG is off
 
 
 TOOL_REGISTRY: dict[str, ToolSpec] = {}
@@ -207,6 +211,42 @@ def find_free_slot(ctx: ToolContext, date: str, after: str = "00:00") -> dict:
     on = parse_date(date, ctx.today)
     slot = ctx.scheduler.next_available_slot(on=on, after=check_time(after))
     return {"ok": True, "date": on.isoformat(), "after": after, "free_slot": slot}
+
+
+def _search(ctx: ToolContext, source: str, query: str, filters: dict) -> dict:
+    query = (query or "").strip()
+    if not query:
+        raise ToolError("query must not be empty")
+    if len(query) > MAX_QUERY_LENGTH:
+        raise ToolError(f"query must be at most {MAX_QUERY_LENGTH} characters")
+    hits = retrieval.build_retriever(ctx.owner).search(query, k=MAX_HITS, sources=[source], filters=filters)
+    return {
+        "ok": True,
+        "source": source,
+        "hits": [{"cite": h.cite, "text": h.chunk.text} for h in hits],
+        "none_found": not hits,
+    }
+
+
+def lookup_care_guidelines(
+    ctx: ToolContext, query: str, species: Optional[str] = None, life_stage: Optional[str] = None
+) -> dict:
+    filters = {}
+    if species:
+        filters["species"] = retrieval.normalize_species(species)
+    if life_stage:
+        filters["life_stage"] = retrieval.normalize_life_stage(life_stage)
+    result = _search(ctx, retrieval.GUIDELINES, query, filters)
+    if result["none_found"]:
+        result["note"] = "No guideline matched. Do not invent times or frequencies: tell the user and ask."
+    return result
+
+
+def find_similar_tasks(ctx: ToolContext, query: str, pet_name: Optional[str] = None) -> dict:
+    filters = {}
+    if pet_name:
+        filters["pet"] = find_pet(ctx.owner, pet_name).name  # unknown pet -> clear error
+    return _search(ctx, retrieval.HISTORY, query, filters)
 
 
 def check_conflicts(ctx: ToolContext) -> dict:
@@ -413,13 +453,55 @@ register(ToolSpec(
     writes=True,
     destructive=True,
 ))
+register(ToolSpec(
+    name="lookup_care_guidelines",
+    description=(
+        "Look up pet-care scheduling guidelines (meals per day, walk length, play, grooming, vet visits, "
+        "medication reminders) for a species and age. Use it BEFORE building a routine or choosing how "
+        "often or when to do something. Returns cited passages; copy the cite text into your reply."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "What you need, e.g. 'puppy daily routine feeding walks play'."},
+            "species": {"type": "string", "description": "dog, cat, rabbit, guinea pig or hamster, if known."},
+            "life_stage": {"type": "string", "description": "puppy, kitten, adult or senior, if known."},
+        },
+        "required": ["query"],
+    },
+    func=lookup_care_guidelines,
+    retrieval=True,
+))
+register(ToolSpec(
+    name="find_similar_tasks",
+    description=(
+        "Search the owner's existing tasks, e.g. to copy a routine from one pet to another "
+        "('same routine as Max'). Returns cited tasks; copy the cite text into your reply."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Words to look for, e.g. 'walk' or 'feeding'."},
+            "pet_name": {"type": "string", "description": "Only search this pet's tasks."},
+        },
+        "required": ["query"],
+    },
+    func=find_similar_tasks,
+    retrieval=True,
+))
 
 
-def tool_schemas() -> list[dict]:
+def tool_names(include_rag: bool = True) -> set[str]:
+    """Names of the tools the agent may call (retrieval tools only when RAG is on)."""
+    return {name for name, s in TOOL_REGISTRY.items() if include_rag or not s.retrieval}
+
+
+def tool_schemas(include_rag: bool = True) -> list[dict]:
     """Provider-neutral tool definitions (name, description, JSON-schema parameters)."""
     return [
         {"name": s.name, "description": s.description, "parameters": s.parameters}
         for s in TOOL_REGISTRY.values()
+        if include_rag or not s.retrieval
     ]
 
 

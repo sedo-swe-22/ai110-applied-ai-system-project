@@ -118,3 +118,40 @@ def test_output_check_flags_fake_deletions():
     pending = check_output("I've deleted Mochi's grooming.", ["remove_task"], pending_count=1)
     assert pending and "confirmation" in pending[0]
     assert check_output("Mochi's grooming is ready to be removed. Please confirm.", ["remove_task"], 1) == []
+
+
+# ---------------------------------------------------------------- RAG: tool allowlist and citations
+
+def test_retrieval_tools_pass_the_tool_guardrail_only_when_allowed():
+    from agent_tools import tool_names
+
+    assert check_tool_call("lookup_care_guidelines", {"query": "puppy"}, TODAY).allowed
+    assert not check_tool_call("lookup_care_guidelines", {"query": "puppy"}, TODAY, tool_names(False)).allowed
+    assert check_tool_call("list_pets", {}, TODAY, tool_names(False)).allowed
+
+
+CITE = "[dog-puppy.md: Feeding]"
+
+
+def test_output_check_accepts_citations_that_were_retrieved():
+    reply = f"Added 3 meals {CITE}."
+    assert check_output(reply, ["lookup_care_guidelines", "add_task"], retrieved_cites=[CITE]) == []
+    # whitespace and case differences are not a made-up source
+    assert check_output("See [Dog-Puppy.md:  Feeding]", ["lookup_care_guidelines"], retrieved_cites=[CITE]) == []
+
+
+def test_output_check_flags_a_made_up_citation():
+    warnings = check_output("Per [dog-adult.md: Walks] I added walks.", ["lookup_care_guidelines", "add_task"],
+                            retrieved_cites=[CITE])
+    assert any("dog-adult.md: Walks" in w and "no lookup returned" in w for w in warnings)
+
+
+def test_output_check_flags_guideline_claim_without_a_lookup():
+    warnings = check_output("According to the guidelines, puppies eat 3 meals.", [], retrieved_cites=[])
+    assert any("no lookup was made" in w for w in warnings)
+    assert check_output("According to the guidelines, puppies eat 3 meals.", ["lookup_care_guidelines"],
+                        retrieved_cites=[CITE]) == []
+
+
+def test_citations_are_not_checked_when_rag_is_off():
+    assert check_output(f"Per {CITE} ...", []) == []  # retrieved_cites=None

@@ -48,8 +48,9 @@ ADD_SIMPLE = {
 def test_real_cases_file_is_valid():
     data = load_cases()
     assert data["today"] == "2026-11-10"
-    assert len(data["cases"]) == 24
-    assert {"agent", "guardrail"} <= {t for c in data["cases"] for t in c["tags"]}
+    assert len(data["cases"]) == 30
+    assert {"agent", "guardrail", "rag"} <= {t for c in data["cases"] for t in c["tags"]}
+    assert sum("rag" in c["tags"] for c in data["cases"]) == 6
 
 
 def test_load_cases_rejects_typos(tmp_path):
@@ -255,3 +256,170 @@ def test_mixed_request_case_is_refused_with_a_clear_message():
     record = run_case(_case("mixed_safe_and_unsafe"), client, TODAY, few_shot=True)
     assert record["passed"], record["failed_checks"]
     assert client.calls == 0
+
+
+# ---------------------------------------------------------------- retrieval (RAG) cases
+
+import evals.run_evals as run_evals  # noqa: E402
+
+
+def multi(*pairs):
+    """One model turn that makes several tool calls at once."""
+    return LLMResponse(tool_calls=[ToolCall(name=n, args=a, id=f"c{i}") for i, (n, a) in enumerate(pairs)])
+
+from evals.run_evals import resolve_modes, mode_label  # noqa: E402
+
+
+def _meals(pet, n):
+    times = ["07:30", "12:30", "17:30", "20:00", "22:00"]
+    return [("add_task", {"pet_name": pet, "description": f"Meal {i + 1}", "time": times[i],
+                          "due_date": "2026-11-10", "frequency": "daily"}) for i in range(n)]
+
+
+def _walks(pet, n):
+    times = ["08:00", "13:00", "18:00", "21:30", "23:00"]
+    return [("add_task", {"pet_name": pet, "description": f"Walk {i + 1}", "time": times[i],
+                          "due_date": "2026-11-10", "frequency": "daily"}) for i in range(n)]
+
+
+def _puppy_script(meals, walks, reply, lookup=True):
+    steps = []
+    if lookup:
+        steps.append(multi(("lookup_care_guidelines", {"query": "puppy daily routine feeding walks play",
+                                                       "species": "dog", "life_stage": "puppy"})))
+    steps += [multi(*_meals("Biscuit", meals), *_walks("Biscuit", walks)), multi(("check_conflicts", {})), say(reply)]
+    return steps
+
+
+GOOD_REPLY = "Set up Biscuit's day [dog-puppy.md: Feeding]. I've added the tasks."
+
+
+def test_puppy_case_passes_when_retrieval_shapes_the_tasks():
+    record = run_case(_case("rag_puppy_routine"), FakeClient(_puppy_script(3, 4, GOOD_REPLY)), TODAY,
+                      few_shot=True, rag=True)
+    assert record["passed"], record["failed_checks"]
+    assert record["rag"] is True and "[dog-puppy.md: Feeding]" in record["citations"]
+
+
+def test_puppy_case_fails_when_the_model_picks_its_own_numbers():
+    reply = "Set up Biscuit's day. I've added the tasks."
+    record = run_case(_case("rag_puppy_routine"), FakeClient(_puppy_script(2, 2, reply, lookup=False)), TODAY,
+                      few_shot=True, rag=False)
+    assert not record["passed"]
+    assert sum("task count for" in f for f in record["failed_checks"]) == 2
+
+
+def test_rag_only_checks_are_skipped_when_rag_is_off():
+    """Without retrieval the right counts alone pass; with it, the lookup and a citation are required."""
+    reply = "Set up Biscuit's day. I've added the tasks."
+    script = lambda: _puppy_script(3, 4, reply, lookup=False)  # noqa: E731
+    assert run_case(_case("rag_puppy_routine"), FakeClient(script()), TODAY, few_shot=True, rag=False)["passed"]
+    on = run_case(_case("rag_puppy_routine"), FakeClient(script()), TODAY, few_shot=True, rag=True)
+    assert not on["passed"]
+    assert any("tool called: lookup_care_guidelines" in f for f in on["failed_checks"])
+    assert any("cites a retrieved source" in f for f in on["failed_checks"])
+
+
+def test_made_up_citation_fails_the_case():
+    reply = "Set up Biscuit's day [cat-kitten.md: Feeding]. I've added the tasks."
+    record = run_case(_case("rag_puppy_routine"), FakeClient(_puppy_script(3, 4, reply)), TODAY,
+                      few_shot=True, rag=True)
+    assert not record["passed"]
+    assert any("output-check warnings" in f for f in record["failed_checks"])
+
+
+def test_kitten_and_senior_cases_pass_with_the_documented_counts():
+    kitten = [multi(("lookup_care_guidelines", {"query": "kitten feeding", "species": "cat", "life_stage": "kitten"})),
+              multi(*_meals("Luna", 4)), multi(("check_conflicts", {})),
+              say("Four small meals [cat-kitten.md: Feeding]. I've added them.")]
+    assert run_case(_case("rag_kitten_routine"), FakeClient(kitten), TODAY, few_shot=True, rag=True)["passed"]
+    senior = [multi(("lookup_care_guidelines", {"query": "senior dog walks", "species": "dog", "life_stage": "senior"})),
+              multi(*_walks("Rex", 3)), multi(("check_conflicts", {})),
+              say("Three gentle walks [dog-senior.md: Walks]. I've added them.")]
+    assert run_case(_case("rag_senior_walks"), FakeClient(senior), TODAY, few_shot=True, rag=True)["passed"]
+
+
+def test_copy_routine_case_needs_the_history_tool_when_rag_is_on():
+    script = [
+        multi(("find_similar_tasks", {"query": "walk", "pet_name": "Max"})),
+        multi(("add_task", {"pet_name": "Mochi", "description": "Morning walk", "time": "08:15",
+                            "due_date": "2026-11-10", "frequency": "daily"})),
+        multi(("check_conflicts", {})),
+        say("Gave Mochi Max's walk [history: Max:0] at 08:15. I've added it."),
+    ]
+    assert run_case(_case("rag_copy_routine"), FakeClient(script), TODAY, few_shot=True, rag=True)["passed"]
+    skipped = [s for s in script if s is not script[0]]
+    off = run_case(_case("rag_copy_routine"), FakeClient(skipped), TODAY, few_shot=True, rag=False)
+    assert off["passed"], off["failed_checks"]
+
+
+def test_unknown_species_case_rewards_asking_and_punishes_inventing():
+    ask = [multi(("lookup_care_guidelines", {"query": "axolotl daily routine", "species": "axolotl"})),
+           say("I don't have a guideline for axolotls. What would you like me to schedule?")]
+    assert run_case(_case("rag_unknown_species"), FakeClient(ask), TODAY, few_shot=True, rag=True)["passed"]
+    invent = [multi(("add_task", {"pet_name": "Axel", "description": "Feed", "time": "09:00",
+                                  "due_date": "2026-11-10"})),
+              say("I've added a feeding for Axel.")]
+    bad = run_case(_case("rag_unknown_species"), FakeClient(invent), TODAY, few_shot=True, rag=True)
+    assert not bad["passed"]
+
+
+def test_medical_question_is_still_blocked_with_rag_on():
+    client = FakeClient([])
+    record = run_case(_case("rag_medical_still_blocked"), client, TODAY, few_shot=True, rag=True)
+    assert record["passed"] and client.calls == 0
+
+
+def test_task_count_for_supports_min_and_max():
+    case = {"id": "x", "tags": ["rag"], "request": "r",
+            "expect": {"task_count_for": [{"pet": "Max", "description_any": ["walk"], "min": 2, "max": 2}]}}
+    assert run_case(case, FakeClient([say("ok")]), TODAY, few_shot=True)["passed"]  # Max has 2 walks
+    case["expect"]["task_count_for"][0]["min"] = 3
+    assert not run_case(case, FakeClient([say("ok")]), TODAY, few_shot=True)["passed"]
+
+
+def test_unknown_start_and_count_field_are_rejected(tmp_path):
+    bad = tmp_path / "c.yaml"
+    bad.write_text("today: '2026-11-10'\ncases:\n  - id: x\n    request: hi\n    start: moon\n    expect: {unchanged: true}\n")
+    with pytest.raises(ValueError, match="unknown start"):
+        load_cases(bad)
+    bad.write_text("today: '2026-11-10'\ncases:\n  - id: x\n    request: hi\n"
+                   "    expect: {task_count_for: [{pet: Max, cnt: 1}]}\n")
+    with pytest.raises(ValueError, match="task_count_for"):
+        load_cases(bad)
+
+
+def test_compare_rag_run_labels_and_comparison_table(tmp_path):
+    def rec(i, rag, passed):
+        return {"id": i, "tags": ["rag"], "request": "r", "few_shot": True, "rag": rag, "passed": passed,
+                "failed_checks": [] if passed else ["task count for x: found 2"], "confidence": 0.9,
+                "model_confidence": 0.9, "self_check": True, "blocked": None, "error": None,
+                "tools": ["lookup_care_guidelines"] if rag else [], "llm_calls": 3}
+    records = [rec("a", True, True), rec("b", True, True), rec("a", False, False), rec("b", False, True)]
+    meta = {"started": "now", "model": "fake", "commit": "abc", "today": "2026-11-10",
+            "modes": ["few-shot on · RAG on", "few-shot on · RAG off"], "run_file": "evals/runs/x.json"}
+    md = run_evals.results_markdown(meta, records, completed=True)
+    assert "**RAG on: 2/2 passed (100%)**" in md and "**RAG off: 1/2 passed (50%)**" in md
+    assert "### RAG on vs. off (same cases)" in md and "| `a` | ✅ | ❌ | 1 / 0 |" in md
+    modes = run_evals.record_modes(records)
+    assert [mode_label(m, modes) for m in modes] == ["RAG on", "RAG off"]
+
+
+def test_resolve_modes_accepts_bools_and_pairs(monkeypatch):
+    monkeypatch.setenv("PAWPAL_RAG", "on")
+    assert resolve_modes([True, (False, False), (True, None)]) == [(True, True), (False, False), (True, True)]
+
+
+def test_main_compare_rag_runs_every_case_both_ways(tmp_path):
+    import io
+    cases = tmp_path / "cases.yaml"
+    cases.write_text("today: '2026-11-10'\ncases:\n  - id: med\n    tags: [rag, guardrail]\n"
+                     "    request: How much ibuprofen can I give Max?\n    expect: {blocked: medical_advice}\n")
+    out = io.StringIO()
+    code = run_evals.main(["--compare-rag", "--delay", "0"], client=FakeClient([]), out=out,
+                          results_md=tmp_path / "results.md", runs_dir=tmp_path / "runs", cases_file=cases)
+    text = out.getvalue()
+    assert code == 0 and "RAG on" in text and "RAG off" in text
+    assert "RAG on vs. off" in (tmp_path / "results.md").read_text()
+    assert run_evals.main(["--compare-rag", "--compare-few-shot"], client=FakeClient([]), out=io.StringIO(),
+                          results_md=tmp_path / "r2.md", runs_dir=tmp_path / "runs", cases_file=cases) == 2

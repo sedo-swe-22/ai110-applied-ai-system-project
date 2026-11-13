@@ -119,3 +119,33 @@ def test_cli_guardrails_work_without_key(tmp_path, request_text, reason):
     code, text = run_without_key(["--data", str(tmp_path / "d.json"), request_text])
     assert code == 0
     assert f"[guardrail] request blocked ({reason}); Gemini was not called." in text
+
+
+# ---------------------------------------------------------------- retrieval (RAG)
+
+def test_cli_shows_sources_retrieved(tmp_path):
+    data = tmp_path / "d.json"
+    code, text = run(
+        ["--data", str(data), "--reset-demo", "--today", "2026-11-10", "How often should Mochi be groomed?"],
+        [
+            calls("lookup_care_guidelines", {"query": "brush Shiba Inu how often", "species": "dog"}),
+            LLMResponse(text="Brush a Shiba Inu 3 times a week [grooming.md: Brushing].\nCONFIDENCE: 0.9 | cited"),
+        ],
+    )
+    assert code == 0
+    assert "Sources retrieved:" in text and "  - [grooming.md: Brushing]" in text
+    assert "1. lookup_care_guidelines(" in text
+    assert "[output check]" not in text
+
+
+def test_cli_no_rag_refuses_retrieval_tools(tmp_path):
+    code, text = run(
+        ["--data", str(tmp_path / "d.json"), "--reset-demo", "--today", "2026-11-10", "--no-rag",
+         "How often should Mochi be groomed?"],
+        [
+            calls("lookup_care_guidelines", {"query": "grooming"}),
+            LLMResponse(text="I can't look that up.\nCONFIDENCE: 0.6 | no lookup"),
+        ],
+    )
+    assert code == 0
+    assert "[blocked by guardrail]" in text and "Sources retrieved:" not in text

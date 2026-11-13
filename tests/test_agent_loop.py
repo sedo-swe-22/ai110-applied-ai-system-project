@@ -269,3 +269,122 @@ def test_json_formatter_merges_payload():
     record.payload = {"run_id": "abc", "tool": "add_task"}
     data = json.loads(JsonLineFormatter().format(record))
     assert data["event"] == "tool_call" and data["run_id"] == "abc" and data["tool"] == "add_task"
+
+
+# ---------------------------------------------------------------- retrieval (RAG)
+
+PUPPY_CITE = "[dog-puppy.md: Feeding]"
+
+
+@pytest.fixture
+def puppy_owner():
+    o = Owner("Jordan")
+    o.add_pet(Pet("Biscuit", "Labrador Retriever"))
+    return o
+
+
+def puppy_script(reply):
+    meals = [("add_task", {"pet_name": "Biscuit", "description": d, "time": t, "due_date": TOMORROW,
+                           "frequency": "daily"})
+             for d, t in [("Breakfast", "07:30"), ("Lunch", "12:30"), ("Dinner", "17:30")]]
+    return [
+        calls(("lookup_care_guidelines", {"query": "puppy daily routine feeding", "species": "dog",
+                                          "life_stage": "puppy"})),
+        calls(*meals),
+        calls(("check_conflicts", {})),
+        say(reply),
+    ]
+
+
+def test_retrieved_guideline_shapes_the_tasks_and_is_cited(puppy_owner):
+    agent, client, saves = make_agent(puppy_owner, puppy_script(
+        f"I set up 3 daily meals for Biscuit {PUPPY_CITE}.\nCONFIDENCE: 0.9 | followed the puppy guideline"), rag=True)
+    result = agent.run("Set up a daily feeding routine for my new puppy Biscuit")
+
+    assert not result.failed and result.output_warnings == []
+    assert [s.tool for s in result.steps][:2] == ["lookup_care_guidelines", "add_task"]
+    assert PUPPY_CITE in result.citations
+    assert sorted(t.time for t in puppy_owner.pets[0].tasks) == ["07:30", "12:30", "17:30"]
+    assert saves == [1]
+    # The model was offered the tools and the retrieval rules.
+    assert "lookup_care_guidelines" in {t["name"] for t in client.calls[0]["tools"]}
+    assert "Retrieval (RAG)" in client.calls[0]["system"]
+    # The lookup result went back to the model.
+    first_result = client.calls[1]["history"][-1]["results"][0][1]
+    assert first_result["hits"][0]["cite"].startswith("[dog-puppy.md")
+
+
+def test_made_up_citation_is_flagged(puppy_owner):
+    agent, _, _ = make_agent(puppy_owner, puppy_script(
+        "Done, following [cat-kitten.md: Feeding].\nCONFIDENCE: 0.9 | ok"), rag=True)
+    result = agent.run("Set up a daily feeding routine for my new puppy Biscuit")
+    assert any("cat-kitten.md: Feeding" in w for w in result.output_warnings)
+
+
+def test_rag_off_hides_and_refuses_the_retrieval_tools(puppy_owner):
+    agent, client, _ = make_agent(puppy_owner, [
+        calls(("lookup_care_guidelines", {"query": "puppy routine"})),
+        say("I can't look that up. What times would you like?\nCONFIDENCE: 0.7 | no guidelines"),
+    ], rag=False)
+    result = agent.run("Set up a daily feeding routine for my new puppy Biscuit")
+
+    assert "lookup_care_guidelines" not in {t["name"] for t in client.calls[0]["tools"]}
+    assert "Retrieval (RAG)" not in client.calls[0]["system"]
+    assert result.steps[0].blocked and not result.steps[0].ok
+    assert result.citations == []
+
+
+def test_no_hits_returns_none_found_and_no_citations(puppy_owner):
+    agent, _, _ = make_agent(puppy_owner, [
+        calls(("lookup_care_guidelines", {"query": "axolotl tank", "species": "axolotl"})),
+        say("I don't have a guideline for axolotls. What would you like scheduled?\nCONFIDENCE: 0.8 | none found"),
+    ], rag=True)
+    result = agent.run("Set up a routine for my axolotl")
+    assert result.steps[0].ok and result.steps[0].result["none_found"] is True
+    assert result.citations == []
+    assert result.output_warnings == [] and not result.actions_taken
+
+
+def test_retrieval_events_are_logged(tmp_path, puppy_owner):
+    log = tmp_path / "agent.jsonl"
+    client = FakeClient(puppy_script(f"Done {PUPPY_CITE}.\nCONFIDENCE: 0.9 | ok"))
+    logger = setup_agent_logger(log)
+    agent = PawPalAgent(puppy_owner, client, logger=logger, today=TODAY, rag=True)
+    result = agent.run("Set up a daily feeding routine for my new puppy Biscuit")
+    for handler in logger.handlers:
+        handler.flush()
+    events = [e for e in read_run(result.run_id, log) if e["event"] == "retrieval"]
+    assert events and events[0]["tool"] == "lookup_care_guidelines"
+    assert PUPPY_CITE in events[0]["cites"]
+
+
+def test_rag_default_follows_the_environment(monkeypatch, owner):
+    from agent import rag_enabled_by_default
+
+    monkeypatch.setenv("PAWPAL_RAG", "off")
+    assert rag_enabled_by_default() is False and PawPalAgent(owner, FakeClient([])).rag is False
+    monkeypatch.setenv("PAWPAL_RAG", "on")
+    assert PawPalAgent(owner, FakeClient([])).rag is True
+    assert PawPalAgent(owner, FakeClient([]), rag=False).rag is False
+
+
+def test_build_system_prompt_adds_retrieval_section_only_when_asked(owner):
+    assert "Retrieval (RAG)" not in build_system_prompt(owner, TODAY)
+    assert "Retrieval (RAG)" in build_system_prompt(owner, TODAY, rag=True)
+
+
+def test_a_full_puppy_routine_fits_under_the_default_cap(puppy_owner):
+    """Live run finding: lookup + 9 add_task + conflict check is 11 calls, more than the old cap of 10."""
+    adds = [("add_task", {"pet_name": "Biscuit", "description": f"Task {i}", "time": f"{7 + i:02d}:30",
+                          "due_date": TOMORROW, "frequency": "daily"}) for i in range(9)]
+    agent, _, saves = make_agent(puppy_owner, [
+        calls(("lookup_care_guidelines", {"query": "puppy routine", "species": "dog", "life_stage": "puppy"})),
+        calls(*adds),  # the model may batch them in one step
+        calls(("check_conflicts", {})),
+        say(f"Set up Biscuit's day {PUPPY_CITE}.\nCONFIDENCE: 0.9 | cited"),
+    ], rag=True)
+    result = agent.run("Set up a daily routine for my new puppy Biscuit")
+    assert not result.failed and len(result.steps) == 11 and len(puppy_owner.pets[0].tasks) == 9
+    assert saves == [1]
+    from guardrails import MAX_TOOL_CALLS
+    assert MAX_TOOL_CALLS >= 16
