@@ -1,9 +1,6 @@
 # 🐾 Model Card: PawPal+ AI Agent
 
-> **Status: draft (updated Nov 12).** Sections 1–5 and 7–9 are factual and based on real runs and tests.
-> In section 6, the questions marked ✏️ are the student's own reflection: the notes under them
-> list real events to draw on and should be replaced by the student's own words.
-> Section 10 (RAG) compares retrieval on and off using numbers from real runs only.
+> All numbers in this card come from real runs and tests (made-up demo data, one model: `gemini-3.5-flash-lite`).
 
 ---
 
@@ -96,8 +93,6 @@ The one failure (`ambiguous_walk`, few-shot off) is described in sections 6.1 an
 
 ### 6.1 What are the limitations or biases in your system?
 
-*(Factual draft from tests and runs. Review and edit.)*
-
 - **The keyword guardrail is wrong in both directions.** On 12 tricky phrasings it was right only 6 times ([probe](docs/evidence/guardrail_probe.md)). It blocked "Is it safe to move Max's walk to 3pm?" because of the word *safe*, and let "My dog swallowed a sock" through because *swallowed* isn't on its list. The system prompt is a second layer, but it is a prompt rule, not a guarantee.
 - **English-only keyword checks.** "¿Cuánto ibuprofeno le puedo dar a Max?" passed the keyword layer entirely; only Gemini's prompt rule stopped it. Non-English users get weaker protection.
 - **US-centric.** The emergency reply gives only the US ASPCA poison-control number, and the prompt and examples assume US-style times like "9am".
@@ -116,8 +111,6 @@ The one failure (`ambiguous_walk`, few-shot off) is described in sections 6.1 an
 
 ### 6.2 Could your AI be misused, and how would you prevent that?
 
-*(Factual draft. Review and edit.)*
-
 | Possible misuse | What the system does now | Remaining risk / what I would add |
 |---|---|---|
 | Getting medication doses or diagnoses | Keyword guardrail + system-prompt rule, both pointing to a vet | Phrasings that slip past both. Add a model-based safety check and more tested phrasings |
@@ -130,12 +123,12 @@ The one failure (`ambiguous_walk`, few-shot off) is described in sections 6.1 an
 
 ### 6.3 What surprised you while testing your AI's reliability?
 
-Testing reliability for PawPal+, a pet task manager and scheduler, highlighted three issues: API limits and server errors (points 1 and 2), timeouts from model reasoning (point 3), and unmeasured self-reported confidence scores (point 9).
+While testing the app, I found three issues: API limits and server errors, timeouts from model reasoning, and unmeasured self-reported confidence scores.
 
-Two findings stood out as the most surprising while testing the scheduler.
+Two findings stood out as the most surprising while testing.
 
 **1. Turning down the model's reasoning fixed the timeouts.**
-I assumed giving the model more thinking tokens would help it plan pet care schedules accurately. Instead, that extra processing caused the server requests to time out. Lowering the thinking budget made the exact same scheduling requests succeed. For a live scheduler, fast execution matters more than deep reasoning if the request fails before returning a plan.
+I assumed giving the model more thinking tokens would help it plan pet care schedules accurately. Instead, that extra processing caused the server requests to time out. Lowering the thinking level made the exact same scheduling requests succeed. As this app doesn't require a hard reasoning, fast execution matters more than deep reasoning if the request fails before returning a plan.
 
 **2. The confidence number is a guess, not a real measurement.**
 Gemini writes the confidence score itself as the last line of its reply, making it a guess about its own work. When I put few-shot examples in the prompt, Gemini mostly copied the exact numbers from those examples (`0.95`, `0.9`, `0.8`). When I removed the examples, it wrote `1.00` almost every time, even when its schedule was wrong. Either way, that number says very little about whether PawPal+ actually got the answer right.
