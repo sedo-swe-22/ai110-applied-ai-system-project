@@ -130,45 +130,25 @@ The one failure (`ambiguous_walk`, few-shot off) is described in sections 6.1 an
 
 ### 6.3 What surprised you while testing your AI's reliability?
 
-> ✏️ **Your answer, in your own words.** Pick the one or two that surprised you most. Real events to draw on:
-> - The first model choices failed in ways I didn't expect: `gemini-2.5-flash` was "no longer available to new users" (404), and `gemini-3.8-flash` kept timing out on Google's side (504/503).
-> - The free tier for `gemini-3.5-flash` allowed only **20 requests per day**, and each chat uses 3–5, so a few Streamlit chats used it up. The retries then waited 5 minutes for an error that couldn't clear until midnight.
-> - The model's *thinking* was the cause of the deadline errors; turning it down made the same requests work.
-> - Same input, same data, same date, but a different reasoning path (skipping `find_free_slot` once), with the same final schedule.
-> - A tiny formatting habit (bold `**CONFIDENCE:**`) silently broke confidence parsing until a unit test caught it.
-> - A fresh clone without an API key showed that even the guardrails, which never need Gemini, didn't work.
-> - The keyword guardrail got only 6 of 12 tricky phrasings right, yet Gemini caught all 3 misses I tested, including one in Spanish (and answered in English).
-> - The model rated itself 0.80–1.00 every time, even when refusing, so its confidence alone says little.
-> - With few-shot examples on, the model mostly copied the confidence numbers from the examples (0.95, 0.9, 0.8); with them off it said 1.00 almost every time, including on its one wrong answer.
-> - The agent was "confidently wrong" once: it guessed which walk to move, said confidence 1.00, and passed the code self-check. Only the eval caught it.
+Testing reliability for PawPal+, a pet task manager and scheduler, highlighted three issues: API limits and server errors (points 1 and 2), timeouts from model reasoning (point 3), and unmeasured self-reported confidence scores (point 9).
+
+Two findings stood out as the most surprising while testing the scheduler.
+
+**1. Turning down the model's reasoning fixed the timeouts.**
+I assumed giving the model more thinking tokens would help it plan pet care schedules accurately. Instead, that extra processing caused the server requests to time out. Lowering the thinking budget made the exact same scheduling requests succeed. For a live scheduler, fast execution matters more than deep reasoning if the request fails before returning a plan.
+
+**2. The confidence number is a guess, not a real measurement.**
+Gemini writes the confidence score itself as the last line of its reply, making it a guess about its own work. When I put few-shot examples in the prompt, Gemini mostly copied the exact numbers from those examples (`0.95`, `0.9`, `0.8`). When I removed the examples, it wrote `1.00` almost every time, even when its schedule was wrong. Either way, that number says very little about whether PawPal+ actually got the answer right.
+
+The third issue involved API availability and free-tier quotas. Hitting deprecated endpoints, server errors, and a 20-request daily cap caused the retry logic to stall for five minutes on errors that would not clear until midnight.
 
 ### 6.4 Describe your collaboration with AI during this project
 
-**How I used AI** *(factual summary; ✏️ rewrite in your own words)*
+Before writing any code, I spent a lot of time planning the project with Claude Code. I started by comparing my earlier work with Claude to assess my current status and explore implementation options, which led to choosing PawPal+. Claude and I drafted `plan_for_final_project.md` and ran a full review that caught around 20 gaps before implementation began, including missing task IDs and an overly strict medical filter that would have blocked basic pet care reminders like "give Max his meds at 8am." Once the plan was solid, I designed the architecture diagram, the tool layer with task references, the guardrails, and the self-check confidence logic with Claude's help. From there, I used Claude Code across the remaining stages:
 
-> - **Planning:** Claude Code helped me compare my earlier projects and recommended PawPal+. We wrote `plan_for_final_project.md` together, and a full plan review found about 20 gaps (for example, tasks had no IDs, and a keyword medical filter would have blocked "give Max his meds at 8am").
-> - **Design:** the tool layer with task refs, the guardrail layers, the self-check and confidence design, and the architecture diagram.
-> - **Code and tests:** Claude wrote the agent, tools, guardrails, Gemini client, CLI and Streamlit chat, with 94 new tests. I approved each step's design before it was built and decided every commit.
-> - **Debugging:** when live Gemini runs failed, we read `logs/agent.jsonl` to find the causes (model availability, thinking time, daily quota) instead of guessing.
-> - **Docs:** the README, this model card draft, and the evidence scripts.
-
-**One suggestion I accepted, and why**
-
-> ✏️ **Your answer.** Candidates (pick one and explain why in your words):
-> - Choosing **PawPal+** for the final project, because its `Scheduler` methods could become agent tools almost unchanged.
-> - **Tool-layer task refs** (`Max:2`) instead of adding an ID field to the `Task` class, which kept the Module 2 core and data format unchanged.
-> - **"Refuse medical advice, but allow medication scheduling"** as the medical guardrail rule.
-> - Switching to **Flash-Lite** and **stopping immediately** when the daily quota is used up, after the probe confirmed the 20/day limit.
-
-**One suggestion I did not accept as written, and why I rejected or changed it**
-
-> ✏️ **Your answer.** Candidates from our sessions (pick one and explain why in your words):
-> - **Jumping into implementation:** Claude was ready to start coding right after the first plan; I stopped it and asked to save the plan to a file and spend more time planning first.
-> - **The default model:** Claude set `gemini-3.5-flash` as the default. During my own Streamlit testing it hit the rate limit, so I asked for a lower-level model with a bigger free quota. A poor fit for the free tier, even though it worked.
-> - **The commit split:** Claude proposed 7 commits with the plan update first; I changed it to put the plan update last.
-> - **Committing:** Claude offered to commit the plan file together with `pytest.ini`; I committed `pytest.ini` alone.
-> - **The mixed-request rule (eval case H5):** Claude's proposed pass rule only checked that *"Add a 9am walk… and tell me how much ibuprofen he can have"* was blocked. I required a *proper* refusal message; that showed the old reply never said the walk wasn't added, so a new reply now says nothing was changed and how to get the safe part done.
-> - **The conflict section:** Claude suggested relabeling the "No scheduling conflicts" check; I decided to leave it as it was (scoped down).
+* **Code and tests:** Claude wrote the agent, tools, guardrails, Gemini client, CLI, and Streamlit chat interface along with 94 tests. I reviewed and approved each design step before implementation and controlled every commit.
+* **Debugging:** When live Gemini runs failed, Claude and I checked `logs/agent.jsonl` to isolate actual causes like model availability, thinking time, and daily quotas rather than guessing.
+* **Documentation:** Claude and I drafted the README, this model card, and the supporting evidence scripts.
 
 ---
 
@@ -222,7 +202,7 @@ Run 1's header shows uncommitted local changes (to `app.py`, which the evals don
 
    Rule 6 in the base prompt already says to ask when the request matches several tasks, but only the version with an example of asking (example 4) actually asked.
 2. **Fewer model calls: 10% fewer in run 1 (36 vs 40) and 16% fewer in run 2 (48 vs 57).** In the logs, the specialized version often asked for the change and the clash check in the *same* turn (e.g. `add_task` + `check_conflicts` together) and skipped a repeated `list_tasks`. Each saved call is one less request against the free-tier limit.
-3. **Confidence anchoring.** With examples, the model mostly reported the exact confidence values shown in the examples (0.95, 0.9, 0.8). Without them it reported 1.00 almost every time, including on its one wrong answer. The examples changed the *number*, not how well it tracks correctness, so the code self-check remains the signal to trust.
+3. **Confidence anchoring.** The confidence number is something Gemini writes itself at the end of its reply; the code does not measure it. The few-shot examples in the prompt end with sample confidence values, and Gemini mostly copied them (0.95, 0.9, 0.8; counted in 2 runs: 9 of 14 and 10 of 19 answers were 0.95). Without examples, it had nothing to copy and said 1.00 in 12 of 14 and 17 of 19 answers, including on its one wrong answer (`ambiguous_walk`, where it guessed which walk to move). So the examples changed which number appears, not how well it matches correctness. The code self-check (did the change really happen, are there clashes) is the signal to trust, and it lowers the shown confidence to 0.3 or less when it fails.
 
 **What did not differ:** all guardrail cases, clash repair, relative dates, recurring tasks, multi-task requests, deletions and the other 5 hard cases passed in both modes.
 
