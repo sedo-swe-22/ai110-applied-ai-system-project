@@ -52,34 +52,34 @@ The final project asks for an upgrade to an earlier project that adds RAG, an ag
 ## Submission Checklist (reference + status)
 From the course page: once all required features are done, use this checklist to prepare the submission.
 
-- [ ] **Code is pushed to the correct GitHub repository**
-- [ ] **Repo is public**
-- [ ] **Required files are present:** You must include your runnable functional code, a comprehensive README.md, a model_card.md for reflections, and a System Architecture Diagram saved as a Mermaid source file (.mmd or .md with Mermaid code block) in a diagrams/ folder.
-- [ ] **Reproducible Execution Evidence:** Instead of demo screenshots, include reproducible command outputs or interaction logs in markdown or .txt files. Your diagram source file and any optional supplementary images should be stored in dedicated /assets or /diagrams folders.
-- [ ] **Commit history shows multiple meaningful commits**
-- [ ] **Standardized Documentation:** Your README.md must identify your base project, and your model_card.md must answer all reflection prompts regarding AI collaboration, biases, and testing results.
-- [ ] **Demo evidence is included:** Your README.md contains at least 2-3 example inputs with their outputs pasted as fenced code blocks that demonstrate your system's behavior without relying on a video. A Loom walkthrough is optional but helpful for human reviewers; if you include one, add the link to your README.
-- [ ] **Final changes are committed and pushed before the deadline**
+- [x] **Code is pushed to the correct GitHub repository**
+- [x] **Repo is public**
+- [x] **Required files are present:** You must include your runnable functional code, a comprehensive README.md, a model_card.md for reflections, and a System Architecture Diagram saved as a Mermaid source file (.mmd or .md with Mermaid code block) in a diagrams/ folder.
+- [x] **Reproducible Execution Evidence:** Instead of demo screenshots, include reproducible command outputs or interaction logs in markdown or .txt files. Your diagram source file and any optional supplementary images should be stored in dedicated /assets or /diagrams folders.
+- [x] **Commit history shows multiple meaningful commits**
+- [x] **Standardized Documentation:** Your README.md must identify your base project, and your model_card.md must answer all reflection prompts regarding AI collaboration, biases, and testing results.
+- [x] **Demo evidence is included:** Your README.md contains at least 2-3 example inputs with their outputs pasted as fenced code blocks that demonstrate your system's behavior without relying on a video. A Loom walkthrough is optional but helpful for human reviewers; if you include one, add the link to your README.
+- [x] **Final changes are committed and pushed before the deadline** *(Nov 15: pushed at `a84c961`; push again only if something changes)*
 
 **Status (reviewed Nov 8, against the live GitHub repo and a fresh clone)**
 | # | Item | Status | Evidence / what's left |
 |---|---|---|---|
-| 1 | Pushed to the correct repo | ✅ for now | `main` = `origin/main` at `sedo-swe-22/ai110-applied-ai-system-project`. Confirm this is the repo name the course expects; push again at the end |
-| 2 | Repo is public | ✅ | GitHub API: `private: false`, `visibility: public` |
-| 3a | Runnable code | ✅ | Fresh clone + new venv: install works and all tests pass with **no `.env`**. Bug found and fixed Nov 8: without a key, even guardrail-blocked requests failed. Now guardrails work without a key, and requests that need Gemini fail cleanly (exit 1, nothing saved). `scripts/record_evidence.sh --offline` verified on a key-less clone |
-| 3b | Comprehensive README.md | ✅ draft (Nov 8, local) | Rewritten for the final project: base project, new features, architecture (embedded Mermaid), setup, run, 3 real example runs, guardrails table, testing summary, limitations, structure. **Student review / own-voice edit still to do.** Update again when evals/RAG land |
-| 3c | model_card.md | ✅ draft (updated Nov 12) | Sections 1–9 from real runs and tests, including section 9 (few-shot on vs. off from two eval runs) and the eval table in section 5. The 4 reflection questions are headers word for word (6.1–6.4). Section 10 (RAG on vs. off, from a real run) written; regression-run line to confirm |
-| 3d | Mermaid diagram in `diagrams/` | ✅ (updated Nov 12) | Matches the code: the eval harness is now a solid box (24 cases, final state checked, few-shot on vs. off); RAG is now solid too (retriever, two sources, 30 cases, RAG on/off). The README embeds an identical copy |
-| 4 | Reproducible execution evidence | ✅ first run (Nov 7) | `scripts/record_evidence.sh` → `docs/evidence/cli_runs.md` (9 cases, all exit 0, header at clean commit `d36d464`), `docs/evidence/test_results.txt`, 3 traces in `docs/traces/`. **Re-run on docs day** so it matches the final code |
-| 4b | Images only in `/assets` or `/diagrams` | ✅ | Only `diagrams/uml_final.png` (Module 2). `assets/` is empty, so git doesn't store it; it appears once screenshots are added |
-| 5 | Multiple meaningful commits | ✅ | 17 commits, mostly small and focused, with code and tests together |
-| 6a | README identifies base project | ✅ draft (Nov 8, local) | "Base project: PawPal+ (Module 2)" section: link to the Module 2 repo, baseline commits, original goal and capabilities, where it stopped, what this project adds |
-| 6b | model_card answers reflection prompts | ⚠️ student part | 6.1 limitations/biases and 6.2 misuse are drafted (review). **6.3 surprises and 6.4 accepted/rejected suggestions need the student's own words** (notes with real events are in place) |
-| 7 | README has 2–3 example inputs/outputs in fenced code blocks | ✅ draft (Nov 8, local) | 3 real runs (clash repair, deletion waits, medical refusal), copied verbatim from `docs/evidence/cli_runs.md` by script. Refresh them after the docs-day evidence re-run |
+| 1 | Pushed to the correct repo | ✅ | `main` = `origin/main` at `a84c961` (Nov 15), `sedo-swe-22/ai110-applied-ai-system-project`. Push again only if something changes |
+| 2 | Repo is public | ✅ | Re-checked Nov 15: the repo URL loads without logging in (HTTP 200) |
+| 3a | Runnable code | ✅ | Fresh clone of `a84c961` (Nov 15) + new venv: install works, **252 tests pass with no `.env`**, and the medical guardrail refuses a dosage question without a key |
+| 3b | Comprehensive README.md | ✅ | Base project, new features (incl. RAG), architecture, setup, run, 4 example runs, guardrails table, testing summary, limitations, structure. **Own-voice pass by the student still open** |
+| 3c | model_card.md | ✅ | Sections 1–10 complete. 6.1 and 6.2 drafted from real runs; **6.3 and 6.4 written by the student**; section 9 (few-shot) and section 10 (RAG) from real runs. Draft banner removed Nov 15 |
+| 3d | Mermaid diagram in `diagrams/` | ✅ | `diagrams/architecture.mmd` (+ PNG export, identical copy embedded in the README). Matches the code: agent, tools, guardrails, retriever with two sources, eval harness |
+| 4 | Reproducible execution evidence | ✅ | Re-recorded Nov 12 with RAG: `docs/evidence/cli_runs.md` (12 cases, all exit 0), `test_results.txt` (252 passed), traces in `docs/traces/`, eval runs in `evals/runs/` |
+| 4b | Images only in `/assets` or `/diagrams` | ✅ | Images are only in `diagrams/` (UML PNG, architecture PNG). `assets/` is empty |
+| 5 | Multiple meaningful commits | ✅ | 38 commits, mostly small and focused, with code and tests together |
+| 6a | README identifies base project | ✅ | "Base project: PawPal+ (Module 2)" section. **Student to confirm it is accurate** |
+| 6b | model_card answers reflection prompts | ✅ | 6.1 limitations and biases, 6.2 misuse, 6.3 surprises and 6.4 AI collaboration are all answered; 6.3 and 6.4 are in the student's words. The accepted and rejected suggestions are in `reflection.md` section 6 |
+| 7 | README has 2–3 example inputs/outputs in fenced code blocks | ✅ | 4 runs (clash repair, deletion waits, medical refusal, RAG puppy routine). Examples 1–3 are from the Nov 7 recording; example 4 is from Nov 12 |
 | 7b | Loom walkthrough (optional) | — | Optional; add the link to the README if recorded |
-| 8 | Final changes pushed before the deadline | ⏳ | Target Sun Nov 15, 9 PM EST |
+| 8 | Final changes pushed before the deadline | ✅ | Pushed Nov 15 (`a84c961`). Deadline Mon Nov 16, 2:59 AM EST |
 
-**Remaining work, by date (updated Nov 12):** evals ✅ (2 runs recorded) → RAG ✅ built Nov 12 (GO) → the `app.py` tabs change → student writing: `model_card.md` 6.3/6.4, `reflection.md`, `ai_interactions.md` (trace links added Nov 12; your own prompts/notes still to add), human-eval table → docs day Nov 14: re-run the evidence script → final push (8).
+**Remaining work (updated Nov 15):** all code, evals, RAG, evidence and docs are done and pushed. Still open, all the student's: an own-voice pass on the README, read every file well enough to explain it, presentation slides and talk, portfolio entry, and (optional) Loom walkthrough, screenshots and human-eval table.
 
 **New items this checklist adds to the plan**
 - **Biases section in `model_card.md`.** Not planned before. Ideas to cover:
@@ -375,18 +375,18 @@ The AI assistant (Claude Code) does the following. The student owns the design d
 
 **Reproducibility**
 - [x] Version ranges in `requirements.txt`, `.env.example`, and `.gitignore` (`logs/`, `.env`, `demo.json`)
-- [ ] Repeat the fresh-clone check after the final push (Nov 15)
+- [x] Repeat the fresh-clone check after the final push (Nov 15) *(done Nov 15 at `a84c961`: 252 passed, no `.env`)*
 - [x] `scripts/record_evidence.sh` + `docs/evidence/` (CLI runs, test results) + `docs/traces/` (reproducible execution evidence). First run Nov 7; `--offline` mode needs no key (verified on a fresh clone Nov 8)
 - [x] Fresh-clone setup check (Nov 8): new venv → `pip install -r requirements.txt` → `pytest` passes with no `.env`. Found and fixed the no-key CLI bug (guardrails now work without a key)
-- [ ] Re-run `scripts/record_evidence.sh` on docs day (Nov 14), after the final code changes
+- [x] Re-run `scripts/record_evidence.sh` on docs day (Nov 14), after the final code changes *(done Nov 12 after the RAG changes: 12 cases)*
 - [x] Traces are a readable decision chain (model decisions → tool calls → self-check → outcome) with the raw log lines at the bottom
 
 **Documentation drafts (the student reviews and edits them)**
-- [ ] A Mermaid architecture diagram (`.mmd` + embedded in the README) that matches the final code
-- [ ] README draft: base project, new features, setup, run and test steps, and sample input/output, using output from real runs
-- [ ] A guardrail and evaluator examples table (input → behavior → result), taken from real runs
-- [ ] `model_card.md` draft: intended use, limitations, safety choices, eval and human-eval tables, the few-shot baseline-vs-specialized comparison, and the RAG before/after (phase 2)
-- [ ] Format a sample agent trace log so it can be committed and linked from `ai_interactions.md`
+- [x] A Mermaid architecture diagram (`.mmd` + embedded in the README) that matches the final code
+- [x] README draft: base project, new features, setup, run and test steps, and sample input/output, using output from real runs
+- [x] A guardrail and evaluator examples table (input → behavior → result), taken from real runs
+- [x] `model_card.md` draft: intended use, limitations, safety choices, eval and human-eval tables, the few-shot baseline-vs-specialized comparison, and the RAG before/after (phase 2) *(the human-eval table was not made; it is optional)*
+- [x] Format a sample agent trace log so it can be committed and linked from `ai_interactions.md`
 
 **Process rules for the AI assistant**
 - Explain each step before building it, and wait for the student's go-ahead on design choices.
@@ -409,27 +409,27 @@ The AI assistant (Claude Code) does the following. The student owns the design d
 **Accounts and running things**
 - [x] Get a Gemini API key from Google AI Studio and put it in a local `.env` as `GEMINI_API_KEY`. Never share it in chat or commit it.
 - [x] Run the real-model evals (run 1 by the student, Nov 11: 18/18 both modes; run 2 at the student's request, Nov 11: 24/24 vs. 23/24) — Streamlit check still to do
-- [ ] Do the "someone else can run it" test: follow the README on a fresh clone exactly as written
+- [x] Do the "someone else can run it" test: follow the README on a fresh clone exactly as written *(done Nov 15, fresh clone)*
 
 **Review**
 - [ ] Read and understand every file the AI writes, well enough to explain it in the presentation
 - [x] Review the draft eval cases and add tricky ones: chose 6 hard cases and decided two pass rules (ambiguous request → ask; mixed safe/unsafe → refuse with a clear message)
 - [ ] Human evaluation: review about 8 real agent replies against written criteria and fill in the markdown table (Input / Criteria / Result / Notes)
-- [ ] Edit the AI's doc drafts into your own voice
+- [x] Edit the AI's doc drafts into your own voice *(model card 6.3 and 6.4, reflection and ai_interactions done; README own-voice pass still open)*
 
 **Writing that has to be yours**
-- [ ] `reflection.md`: how you used AI, at least one suggestion you accepted and one you rejected or revised, and limitations and future improvements. Keep a running note as you go.
-- [ ] `ai_interactions.md`: your record of the prompts you used and what happened, with a link to the committed trace log
+- [x] `reflection.md`: how you used AI, at least one suggestion you accepted and one you rejected or revised, and limitations and future improvements. Keep a running note as you go. *(final-project section 6 and key takeaway added Nov 15)*
+- [x] `ai_interactions.md`: your record of the prompts you used and what happened, with a link to the committed trace log *(prompt comparison and notes filled Nov 15)*
 - [ ] README "original project" section: confirm the draft is accurate
 
 **Communicating the results**
 - [ ] Optional: screenshots (in `assets/`) and a Loom walkthrough (link in the README). Neither replaces the text evidence
 - [ ] Presentation slides and talk
 - [ ] Portfolio entry and final submission
-- [ ] Go through the Submission Checklist (top of this file) before submitting
+- [x] Go through the Submission Checklist (top of this file) before submitting *(reviewed Nov 15)*
 
 **Git**
-- [ ] Decide when to commit and push
+- [x] Decide when to commit and push *(student decided; pushed Nov 15)*
 
 **Running reflection notes** (add to these as you go)
 - Rejected or revised: the AI offered to commit the plan file together with `pytest.ini`; the student chose to commit `pytest.ini` alone.
