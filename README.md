@@ -299,7 +299,7 @@ run_id: 7625ef0c  (details in logs/agent.jsonl)
 Trace written to docs/traces/trace_7625ef0c.md
 ```
 
-Step-by-step trace: [`docs/traces/trace_7625ef0c.md`](docs/traces/trace_7625ef0c.md)
+Step-by-step trace: [`docs/traces/trace_add-a-task-that-clashes-agent-repairs-it.md`](docs/traces/trace_add-a-task-that-clashes-agent-repairs-it.md)
 
 ### 2. A deletion waits for the owner
 
