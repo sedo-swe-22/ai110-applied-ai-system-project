@@ -178,12 +178,23 @@ with tab_assistant:
         '"Move Mochi\'s grooming to 11:00". Every step is shown below the reply and logged to logs/agent.jsonl.'
     )
 
-    for message in st.session_state.chat:
-        with st.chat_message(message["role"]):
-            if message["role"] == "user":
-                st.markdown(message["text"])
-            else:
-                render_result(message["result"])
+    # The input stays at the top; the conversation is listed below it, newest first.
+    llm_client = get_llm_client()
+    if llm_client is None:
+        st.info(
+            "The assistant needs a Gemini API key. Copy `.env.example` to `.env`, set "
+            "`GEMINI_API_KEY`, then restart the app. The rest of PawPal+ works without it."
+        )
+
+    prompt = st.chat_input("Ask PawPal+ to plan your pets' care…", disabled=llm_client is None)
+    if prompt and llm_client is not None:
+        agent = PawPalAgent(owner, llm_client, logger=agent_logger, save_fn=save)
+        with st.spinner("PawPal+ is planning…"):
+            result = agent.run(prompt)
+        st.session_state.chat.append({"role": "user", "text": prompt})
+        st.session_state.chat.append({"role": "assistant", "result": result})
+        st.session_state.pending = [(result.run_id, a) for a in result.pending_actions]
+        st.rerun()  # redraw so the schedule below shows the agent's changes
 
     if "assistant_flash" in st.session_state:
         st.success(st.session_state.pop("assistant_flash"))
@@ -209,22 +220,16 @@ with tab_assistant:
             st.session_state.assistant_flash = f"Cancelled: {action.summary}. Nothing was deleted."
             st.rerun()
 
-    llm_client = get_llm_client()
-    if llm_client is None:
-        st.info(
-            "The assistant needs a Gemini API key. Copy `.env.example` to `.env`, set "
-            "`GEMINI_API_KEY`, then restart the app. The rest of PawPal+ works without it."
-        )
-
-    prompt = st.chat_input("Ask PawPal+ to plan your pets' care…", disabled=llm_client is None)
-    if prompt and llm_client is not None:
-        agent = PawPalAgent(owner, llm_client, logger=agent_logger, save_fn=save)
-        with st.spinner("PawPal+ is planning…"):
-            result = agent.run(prompt)
-        st.session_state.chat.append({"role": "user", "text": prompt})
-        st.session_state.chat.append({"role": "assistant", "result": result})
-        st.session_state.pending = [(result.run_id, a) for a in result.pending_actions]
-        st.rerun()  # redraw so the schedule below shows the agent's changes
+    # Newest exchange first. Each exchange is a (question, answer) pair and keeps that order inside.
+    chat = st.session_state.chat
+    exchanges = [chat[i:i + 2] for i in range(0, len(chat), 2)]
+    for exchange in reversed(exchanges):
+        for message in exchange:
+            with st.chat_message(message["role"]):
+                if message["role"] == "user":
+                    st.markdown(message["text"])
+                else:
+                    render_result(message["result"])
 
 with tab_schedule:
     if "flash" in st.session_state:
