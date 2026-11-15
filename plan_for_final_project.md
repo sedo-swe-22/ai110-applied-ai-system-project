@@ -59,15 +59,15 @@ From the course page: once all required features are done, use this checklist to
 - [x] **Commit history shows multiple meaningful commits**
 - [x] **Standardized Documentation:** Your README.md must identify your base project, and your model_card.md must answer all reflection prompts regarding AI collaboration, biases, and testing results.
 - [x] **Demo evidence is included:** Your README.md contains at least 2-3 example inputs with their outputs pasted as fenced code blocks that demonstrate your system's behavior without relying on a video. A Loom walkthrough is optional but helpful for human reviewers; if you include one, add the link to your README.
-- [x] **Final changes are committed and pushed before the deadline** *(Nov 15: pushed at `a84c961`; push again only if something changes)*
+- [x] **Final changes are committed and pushed before the deadline** *(Nov 15: pushed; push again only if something changes)*
 
 **Status (reviewed Nov 8, against the live GitHub repo and a fresh clone)**
 | # | Item | Status | Evidence / what's left |
 |---|---|---|---|
-| 1 | Pushed to the correct repo | ✅ | `main` = `origin/main` at `a84c961` (Nov 15), `sedo-swe-22/ai110-applied-ai-system-project`. Push again only if something changes |
+| 1 | Pushed to the correct repo | ✅ | `main` = `origin/main` (Nov 15), `sedo-swe-22/ai110-applied-ai-system-project`. Push again only if something changes |
 | 2 | Repo is public | ✅ | Re-checked Nov 15: the repo URL loads without logging in (HTTP 200) |
 | 3a | Runnable code | ✅ | Fresh clone of `a84c961` (Nov 15) + new venv: install works, **252 tests pass with no `.env`**, and the medical guardrail refuses a dosage question without a key |
-| 3b | Comprehensive README.md | ✅ | Base project, new features (incl. RAG), architecture, setup, run, 4 example runs, guardrails table, testing summary, limitations, structure. **Own-voice pass by the student still open** |
+| 3b | Comprehensive README.md | ✅ | Base project, new features (incl. RAG), architecture, setup, run, 4 example runs, guardrails table, testing summary, limitations, structure. Student reviewed it Nov 15 and decided no own-voice rewrite is needed |
 | 3c | model_card.md | ✅ | Sections 1–10 complete. 6.1 and 6.2 drafted from real runs; **6.3 and 6.4 written by the student**; section 9 (few-shot) and section 10 (RAG) from real runs. Draft banner removed Nov 15 |
 | 3d | Mermaid diagram in `diagrams/` | ✅ | `diagrams/architecture.mmd` (+ PNG export, identical copy embedded in the README). Matches the code: agent, tools, guardrails, retriever with two sources, eval harness |
 | 4 | Reproducible execution evidence | ✅ | Re-recorded Nov 12 with RAG: `docs/evidence/cli_runs.md` (12 cases, all exit 0), `test_results.txt` (252 passed), traces in `docs/traces/`, eval runs in `evals/runs/` |
@@ -77,9 +77,9 @@ From the course page: once all required features are done, use this checklist to
 | 6b | model_card answers reflection prompts | ✅ | 6.1 limitations and biases, 6.2 misuse, 6.3 surprises and 6.4 AI collaboration are all answered; 6.3 and 6.4 are in the student's words. The accepted and rejected suggestions are in `reflection.md` section 6 |
 | 7 | README has 2–3 example inputs/outputs in fenced code blocks | ✅ | 4 runs (clash repair, deletion waits, medical refusal, RAG puppy routine). Examples 1–3 are from the Nov 7 recording; example 4 is from Nov 12 |
 | 7b | Loom walkthrough (optional) | — | Optional; add the link to the README if recorded |
-| 8 | Final changes pushed before the deadline | ✅ | Pushed Nov 15 (`a84c961`). Deadline Mon Nov 16, 2:59 AM EST |
+| 8 | Final changes pushed before the deadline | ✅ | Pushed Nov 15 (latest push is on `origin/main`; see `git log`). Deadline Mon Nov 16, 2:59 AM EST |
 
-**Remaining work (updated Nov 15):** all code, evals, RAG, evidence and docs are done and pushed. Still open, all the student's: an own-voice pass on the README, read every file well enough to explain it, presentation slides and talk, portfolio entry, and (optional) Loom walkthrough, screenshots and human-eval table.
+**Remaining work (updated Nov 15):** all code, evals, RAG, evidence and docs are done and pushed. Still open, all the student's: read every file well enough to explain it, presentation slides and talk, portfolio entry, and (optional) Loom walkthrough, screenshots and human-eval table.
 
 **New items this checklist adds to the plan**
 - **Biases section in `model_card.md`.** Not planned before. Ideas to cover:
@@ -415,7 +415,7 @@ The AI assistant (Claude Code) does the following. The student owns the design d
 - [ ] Read and understand every file the AI writes, well enough to explain it in the presentation
 - [x] Review the draft eval cases and add tricky ones: chose 6 hard cases and decided two pass rules (ambiguous request → ask; mixed safe/unsafe → refuse with a clear message)
 - [ ] Human evaluation: review about 8 real agent replies against written criteria and fill in the markdown table (Input / Criteria / Result / Notes)
-- [x] Edit the AI's doc drafts into your own voice *(model card 6.3 and 6.4, reflection and ai_interactions done; README own-voice pass still open)*
+- [x] Edit the AI's doc drafts into your own voice *(model card 6.3 and 6.4, reflection and ai_interactions done; the student reviewed the README Nov 15 and kept it as is)*
 
 **Writing that has to be yours**
 - [x] `reflection.md`: how you used AI, at least one suggestion you accepted and one you rejected or revised, and limitations and future improvements. Keep a running note as you go. *(final-project section 6 and key takeaway added Nov 15)*

@@ -303,7 +303,7 @@ Step-by-step trace: [`docs/traces/trace_7625ef0c.md`](docs/traces/trace_7625ef0c
 
 ### 2. A deletion waits for the owner
 
-`remove_task` only *queues* the deletion. Here the owner answers no (`--no`), so nothing is deleted.
+`remove_task` only *queues* the deletion. In this example, the owner declines (`--no`), so nothing is deleted.
 
 ```bash
 python -m pawpal_cli --data demo.json --reset-demo --today 2026-11-10 --no --export-trace "Delete Mochi's grooming"
