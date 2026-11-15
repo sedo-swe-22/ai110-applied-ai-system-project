@@ -151,5 +151,4 @@ I would add task durations so conflict detection can find overlapping ranges, sh
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
-
-AI is fastest when the request is small and checkable, and my review is what keeps the design right. Reviewing against the requirements cut my over-built first design, and reading the generated code found real edge cases (duplicate recurrence, unpadded times) that the first version missed.
+In the final project, I learned that an AI agent needs a clear goal and a clear stopping point. Without them, it can keep running with no proper end. Without the clear goal (specific status), AI will bring up continuously, so there would be something that I need to work on. I now define what "done" means before I ask an AI to build or run anything.
